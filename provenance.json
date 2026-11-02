@@ -1,0 +1,39 @@
+{
+  "generated": "2026-11-02",
+  "sources": [
+    {
+      "library": "GmSSL",
+      "version": "v3.2.0",
+      "commit": "7c9f02904ef3",
+      "url": "https://github.com/guanzhi/GmSSL/blob/v3.2.0/src/sm4.c",
+      "license": "Apache-2.0",
+      "file": "gmssl_sm4.c",
+      "bytes": 29011,
+      "lines": 918,
+      "sha256": "1d7374c8c8fc4ca9fc7dcae60ffcd3d067378c316db1fff662634e1fb189e079"
+    },
+    {
+      "library": "Tongsuo",
+      "version": "8.5.0",
+      "commit": "80cfbe3eb194",
+      "url": "https://github.com/Tongsuo-Project/Tongsuo/blob/8.5.0/crypto/sm4/sm4.c",
+      "license": "Apache-2.0",
+      "file": "tongsuo_sm4.c",
+      "bytes": 19806,
+      "lines": 380,
+      "sha256": "ada930751c8b976522d72cd2054b85d59222a4aa479d6fcb042b409f70d011af"
+    },
+    {
+      "library": "BabaSSL",
+      "version": "8.5.0",
+      "commit": "80cfbe3eb194",
+      "url": "https://github.com/BabaSSL/BabaSSL/blob/8.5.0/crypto/sm4/sm4.c",
+      "license": "Apache-2.0",
+      "file": "babassl_sm4.c",
+      "bytes": 19806,
+      "lines": 380,
+      "sha256": "ada930751c8b976522d72cd2054b85d59222a4aa479d6fcb042b409f70d011af"
+    }
+  ],
+  "note": "三份源码均按发行 tag 固定下载；Tongsuo 8.5.0 与 BabaSSL 8.5.0 指向同一 commit 且文件哈希相同。"
+}
