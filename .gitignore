@@ -19,3 +19,6 @@ simulate_out.txt
 
 # 报告目录
 out/
+
+# 离线传输包
+*.bundle
