@@ -7,6 +7,15 @@
 """
 import json, os, sys
 
+import sys as _sys
+# Windows 上 stdout 可能是 cp1252（GitHub Actions 的 runner 就是），中文会直接抛
+# UnicodeEncodeError。统一强制 UTF-8，避免"脚本在 CI 上跑不起来"这类环境性失败。
+try:
+    _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    _sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 

@@ -24,6 +24,10 @@ if ($text -notmatch $expected) { throw "未找到期望密文" }
 if ($text -match 'FAIL') { throw "输出包含 FAIL" }
 Write-Host "  通过" -ForegroundColor Green
 
+# 关键：模拟 GitHub runner 的 cp1252 输出环境，否则本机（UTF-8 控制台）
+# 测不出 UnicodeEncodeError 这类问题
+$env:PYTHONIOENCODING = 'cp1252'
+
 Step "3/5 第三方源码溯源校验"
 & $py .\tools\check_provenance.py
 if ($LASTEXITCODE -ne 0) { throw "溯源校验失败" }
@@ -38,3 +42,4 @@ Step "5/5 报告结构校验"
 if ($LASTEXITCODE -ne 0) { throw "结构校验失败" }
 
 Write-Host "`n[全部通过] 与 GitHub Actions 的 smoke 链路一致" -ForegroundColor Green
+

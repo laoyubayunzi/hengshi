@@ -17,6 +17,10 @@ jobs:
   smoke:
     runs-on: windows-latest
     timeout-minutes: 15
+    env:
+      # Windows runner 的默认 stdout 是 cp1252，中文输出会抛 UnicodeEncodeError
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: "1"
 
     steps:
       - uses: actions/checkout@v5
@@ -68,7 +72,7 @@ jobs:
 
       - name: 上传报告产物
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: report-smoke
           path: |
