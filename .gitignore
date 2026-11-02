@@ -22,3 +22,10 @@ out/
 
 # 离线传输包
 *.bundle
+# Python 缓存
+__pycache__/
+*.pyc
+
+# smoke 模式产物
+report.smoke.json
+report.smoke.md

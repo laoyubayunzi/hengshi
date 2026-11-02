@@ -34,12 +34,14 @@ if ($LASTEXITCODE -ne 0) { throw "溯源校验失败" }
 
 Step "4/5 夹具生成报告"
 & $py .\make_report.py --smoke
+Copy-Item report.smoke.json report.json -Force
 & $py .\make_findings.py
 if ($LASTEXITCODE -ne 0) { throw "报告生成失败" }
 
-Step "5/5 报告结构校验"
+Step "5/5 报告结构校验 + 文档口径扫描"
 & $py .\tools\check_schema.py
-if ($LASTEXITCODE -ne 0) { throw "结构校验失败" }
+& $py .\tools\check_docs.py
+if ($LASTEXITCODE -ne 0) { throw "结构校验或文档扫描失败" }
 
 Write-Host "`n[全部通过] 与 GitHub Actions 的 smoke 链路一致" -ForegroundColor Green
 

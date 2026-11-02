@@ -20,7 +20,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
 REQUIRED_REPORT = ["tool", "version", "sm4_vector", "ttest", "convergence",
-                   "attack_aligned_32rounds", "false_positive", "provenance"]
+                   "attack_aligned_32rounds", "false_positive", "provenance",
+                   "real_recovery", "cost"]
 REQUIRED_TTEST = ["t_ttable", "t_constant_time", "verdict_ttable", "verdict_constant_time"]
 DETECTION = {"clean", "leak", "inconclusive"}
 EXPLOIT = {"未验证", "部分信息恢复", "完整密钥恢复", "不适用"}

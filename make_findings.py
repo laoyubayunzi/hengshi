@@ -1,6 +1,9 @@
 # make_findings.py - 把实验数据整理成"检测发现"格式（合规报告骨架）
 # 用法: python make_findings.py   （先跑 make_report.py 生成 report.json）
-import json, os, time
+import json, os, sys, time
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from tools.describe import recovery_level, recovery_sentence, scope_sentence
 
 import sys as _sys
 # Windows 上 stdout 可能是 cp1252（GitHub Actions 的 runner 就是），中文会直接抛
@@ -82,12 +85,12 @@ for L in [x for x in (rep.get("libs") or []) if x["verdict"] == "LEAK"]:
     rr = (rep.get("real_recovery") or {}).get(L["name"].lower(), {})
     matched = rr.get("matched")
     total = rr.get("total")
-    exploit = "部分信息恢复" if (matched == total and total) else "未验证"
+    exploit = "部分信息恢复" if recovery_level(rr) == "partial" else "未验证"
     extra = []
     if exploit == "部分信息恢复":
-        extra.append(f"在此基础上完成部分密钥恢复：恢复 rk[0] 全部 4 个字节的高 4 bit（{matched}/{total}），共 16 bit")
+        extra.append("在此基础上完成部分密钥恢复：" + recovery_sentence(rr, L["name"]))
     else:
-        extra.append(f"同一方法在该库上未收敛（{matched}/{total}），原因待查（可能与其表未按行对齐有关），如实记为未验证")
+        extra.append(recovery_sentence(rr, L["name"]) + "；原因待查（可能与其表未按行对齐有关）")
     add(f"{L['name']} 官方 SM4 实现存在可测的时序泄漏",
         f"{L['name']} 上游 SM4 实现（官方源码，未改写，标准向量通过）",
         L["t"], L["effect_pct"],
@@ -136,9 +139,7 @@ L.append("- **统计证据**（Welch t 值 + 效应量 + √n 收敛）覆盖上
 rr_all = rep.get("real_recovery") or {}
 g_rr = rr_all.get("gmssl") or {}
 t_rr = rr_all.get("tongsuo") or {}
-L.append("- **密码学证据分两级**：**完整 128 bit 主密钥恢复**仅在自研实现的行对齐布局上完成；"
-         f"真实库上可做到**部分恢复**（GmSSL 三次重复分别 {g_rr.get('runs')}/{g_rr.get('total')} 字节的高 4 bit，"
-         f"Tongsuo {t_rr.get('matched')}/{t_rr.get('total')} 未收敛），低半字节在行粒度下不可辨识。\n")
+L.append("- **密码学证据分两级**：" + scope_sentence(rep) + "\n")
 L.append("**两级判定，两个字段，不混为一谈**：")
 L.append("- `detection`（检测结论）：`clean` / `leak` / `inconclusive` —— 是否存在数据相关的时间差异；")
 L.append("- `exploit`（可利用性）：`未验证` / `部分信息恢复` / `完整密钥恢复` —— 该差异被利用到什么程度。")

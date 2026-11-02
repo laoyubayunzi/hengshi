@@ -12,6 +12,9 @@ except Exception:
     pass
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+import sys as _s
+_s.path.insert(0, HERE)
+from tools.describe import scope_sentence, recovery_sentence
 rep = json.load(open(os.path.join(HERE, "report.json"), encoding="utf-8"))
 prov = json.load(open(os.path.join(HERE, "provenance.json"), encoding="utf-8"))
 
@@ -64,11 +67,7 @@ L.append(f"反推主密钥  {atk.get('recovered_master_key', '—')}")
 L.append(f"真实主密钥  {atk.get('true_master_key', '—')}    {'完全一致' if atk.get('master_key_match') else '不一致'}")
 L.append("```")
 rr = rep.get("real_recovery") or {}
-_g = rr.get("gmssl") or {}
-_t = rr.get("tongsuo") or {}
-L.append(f"\n**证据范围（分两级）**：完整 128 bit 恢复仅在本项目自研的行对齐布局上完成；"
-         f"真实库做到部分恢复——GmSSL 本轮 {_g.get('matched')}/{_g.get('total')} 个字节的高 4 bit，"
-         f"Tongsuo {_t.get('matched')}/{_t.get('total')} 未收敛。\n")
+L.append("\n**证据范围（分两级）**：" + scope_sentence(rep) + "\n")
 
 L.append("**5. 不会乱报**\n")
 if fp.get("variants"):

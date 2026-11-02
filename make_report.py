@@ -23,6 +23,8 @@ except Exception:
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+from tools.describe import (recovery_level, recovery_runs_text, recovery_sentence,
+                            recovery_short, cost_sentence, scope_sentence)
 from tools.parsers import (parse_verify, parse_ttest, parse_libs, parse_compare,
                            parse_sweep, parse_converge, parse_attack, parse_real_recovery)
 EXE = os.path.join(HERE, "hengshi.exe")
@@ -177,11 +179,7 @@ def render_markdown(rep):
         L.append("|---|---|---|---|")
         for x in libs:
             L.append(f"| {x['name']} | {x['t']:.2f} | {x['effect_pct']:.2f}% | **{x['verdict']}** |")
-        rr0 = (rep.get("real_recovery") or {}).get("gmssl") or {}
-        tr0 = (rep.get("real_recovery") or {}).get("tongsuo") or {}
-        L.append(f"\n**证据范围（分两级）**：完整 128 bit 主密钥恢复仅在自研行对齐布局上完成；"
-                 f"真实库做到部分恢复——GmSSL 三次重复分别为 {rr0.get('runs')}/{rr0.get('total')} 个字节的高 4 bit"
-                 f"（低 4 bit 在行粒度下不可辨识），Tongsuo {tr0.get('matched')}/{tr0.get('total')} 未收敛。\n")
+        L.append("\n**证据范围（分两级）**：" + scope_sentence(rep) + "\n")
 
     if cl.get("gmssl_ttable"):
         L.append("### 2.2 同一份源码的两种编译配置（隔离「表布局」变量）\n")
@@ -233,10 +231,7 @@ def render_markdown(rep):
                      f"（理论 √{ratio} ≈ {ratio ** 0.5:.2f} 倍）；常量时间版不随样本量增长。\n")
 
     L.append("## 6. 密钥恢复（Flush+Reload）\n")
-    L.append("> **范围说明**：完整 128 bit 主密钥恢复仅在**自研实现**的行对齐布局上完成"
-             "（该布局是为隔离「表布局」这一变量而构造的受控实验）；"
-             "真实库只做到**部分**恢复（GmSSL 16 bit 高半字节，见第 7 节）；"
-             "Tongsuo 上该方法未收敛，如实记为未验证。\n")
+    L.append("> **范围说明**：" + scope_sentence(rep) + "\n")
     if atk:
         L.append("### 6.1 行对齐布局（每项独占缓存行），被攻击实现 32 轮\n")
         L.append(f"- 真实轮密钥：`{' '.join(atk.get('true_round_keys', []))}`")
@@ -254,24 +249,26 @@ def render_markdown(rep):
 
     rr = rep.get("real_recovery") or {}
     if rr:
-        L.append("## 7. 真实库上的部分密钥恢复（负结果之外的进展）\n")
+        L.append("## 7. 真实库上的部分密钥恢复\n")
         L.append("> 行粒度只能确定表索引落在哪一行，因此上限是每个字节的高 4 bit。"
                  "这不是缺陷，是观测通道的物理边界（见 HS-003）。\n")
         L.append("| 实现 | 恢复的高 4 bit 字节数 | 说明 |")
         L.append("|---|---|---|")
         for name, key in (("GmSSL", "gmssl"), ("Tongsuo", "tongsuo")):
             v = rr.get(key) or {}
-            note = "稳定收敛" if (v.get("matched") == v.get("total") and v.get("total")) else "未收敛（原因待查）"
-            L.append(f"| {name} | {v.get('matched')}/{v.get('total')} | {note} |")
+            lvl = recovery_level(v)
+            note = "部分恢复" if lvl == "partial" else ("未收敛（原因待查）" if lvl == "none" else "无数据")
+            L.append(f"| {name} | {recovery_runs_text(v)} | {note} |")
         g = rr.get("gmssl") or {}
         if g.get("per_byte"):
-            L.append("\nGmSSL 逐字节：\n")
+            L.append("\nGmSSL 逐字节（最近一次）：\n")
             L.append("| 字节 | 真实高4位 | 恢复高4位 | 得分 |")
             L.append("|---|---|---|---|")
             for b in g["per_byte"]:
                 L.append(f"| b{b['byte']} | 0x{b['true_hi']} | 0x{b['best_hi']} | {b['score']} |")
-        L.append("\n**结论**：在真实 GmSSL 实现上完成了 16 bit（4 字节 × 高 4 bit）的部分信息恢复；"
-                 "完整 128 bit 主密钥恢复仍需更细的观测通道。Tongsuo 上同一方法未收敛，如实记录为未验证。\n")
+        L.append("\n**结论**：" + recovery_sentence(rr.get("gmssl") or {}, "GmSSL") +
+                 "；" + recovery_sentence(rr.get("tongsuo") or {}, "Tongsuo") +
+                 "。完整 128 bit 主密钥恢复仍需更细的观测通道。\n")
 
     cs = rep.get("cost") or {}
     if cs.get("ratio"):
@@ -288,7 +285,8 @@ def render_markdown(rep):
              "hengshi ttest 40000\nhengshi converge\nhengshi attack 64 200 32\n"
              "hengshi attack 4 200 4\nhengshi sweep 10 20000\n```\n")
 
-    open(os.path.join(HERE, "report.md"), "w", encoding="utf-8").write("\n".join(L))
+    out_name = "report.smoke.md" if str(rep.get("mode", "")).startswith("smoke") else "report.md"
+    open(os.path.join(HERE, out_name), "w", encoding="utf-8").write("\n".join(L))
 
     return (f"vector={rep.get('sm4_vector')}  t_tt={t.get('t_ttable')}  "
             f"t_ct={t.get('t_constant_time')}  growth={rep.get('convergence_growth')}x  "
@@ -303,9 +301,10 @@ def main():
         rep = json.load(open(fixture, encoding="utf-8"))
         rep["generated"] = time.strftime("%Y-%m-%d %H:%M:%S")
         rep["mode"] = "smoke (fixture)"
-        json.dump(rep, open(os.path.join(HERE, "report.json"), "w", encoding="utf-8"),
+        # 写到 report.smoke.json，不覆盖真实实验产物
+        json.dump(rep, open(os.path.join(HERE, "report.smoke.json"), "w", encoding="utf-8"),
                   ensure_ascii=False, indent=2)
-        print("smoke: 由夹具生成 report.json / report.md（未执行任何计时实验）")
+        print("smoke: 由夹具生成 report.smoke.json（未执行任何计时实验，不覆盖 report.json）")
         print("  " + render_markdown(rep))
         return 0
 
