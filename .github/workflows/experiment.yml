@@ -1,0 +1,43 @@
+﻿name: experiment (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      n_per_class:
+        description: "每类样本量"
+        required: false
+        default: "40000"
+
+# 完整侧信道实验：必须在噪声可控的机器上跑。
+# 默认只在手动触发时运行；若要自动化，请改用 self-hosted runner 并固定 CPU 频率与绑核。
+
+jobs:
+  full:
+    runs-on: [self-hosted, windows, x64]
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 编译
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File .\build.ps1
+
+      - name: 完整实验 + 报告
+        shell: pwsh
+        run: |
+          python .\make_report.py
+          python .\make_findings.py
+          python .\sync_readme.py
+          python .\tools\check_provenance.py
+          python .\tools\check_schema.py
+
+      - name: 上传完整产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-full
+          path: |
+            report.json
+            report.md
+            findings.json
+            findings.md

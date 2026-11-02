@@ -15,7 +15,7 @@ if (-not (Test-Path $vcvars)) {
 }
 if (-not $vcvars) { throw 'vcvars64.bat not found - need MSVC' }
 
-$common = '/nologo /utf-8 /O2 /W3 /I src\thirdparty'
+$common = '/nologo /utf-8 /O2 /W3 /MT /I src\thirdparty'
 
 # 小表配置：把对外符号全部改名，避免与 T-table 版本冲突
 $renames = @(

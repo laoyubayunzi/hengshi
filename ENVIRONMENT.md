@@ -9,7 +9,7 @@
 | CPU | Intel（x86-64，支持 RDTSCP / CLFLUSH / lfence） |
 | 操作系统 | Windows 11（10.0.26200） |
 | 编译器 | MSVC 19.44（Visual Studio 2022 Build Tools，x64） |
-| 编译选项 | `/utf-8 /O2 /W3`，`/MT` 静态链接 |
+| 编译选项 | `/utf-8 /O2 /W3 /MT`（静态运行库，目标机无需 VC 运行时） |
 | 绑核 | 启动时 `SetThreadAffinityMask` 绑 0 号核，进程 `HIGH_PRIORITY_CLASS` |
 | 电源 | 全程接电源（电池模式下 CPU 降频会让 t 值漂移） |
 
@@ -32,6 +32,17 @@
 
 三份源码按发行 tag 固定下载，文件哈希记录在 `provenance.json`，每次生成报告时现场复算比对；
 `tools/check_provenance.py` 可在 CI 里独立校验。
+
+## 运行模式（CI 与本地）
+
+| 模式 | 命令 | 做什么 | 用在哪 |
+|---|---|---|---|
+| 完整 | `python make_report.py` | 全部计时实验（约 60s） | 本地 / 自托管机器 |
+| 快速 | `python make_report.py --quick` | 小样本（每类 4000）真实测量 | 本地调试 |
+| 夹具 | `python make_report.py --smoke` | **不跑任何计时实验**，由 `tests/fixture_report.json` 生成报告 | GitHub 共享 runner |
+
+`--smoke` 存在的理由：共享 runner 的调度噪声会让 t 值不可信，把 t 值当 CI 门禁只能得到随机红的流水线。
+CI 只校验「能编译 + 算法正确 + 源码可溯源 + 报告链路可用」，完整实验交给 `.github/workflows/experiment.yml`（self-hosted + 手动触发）。
 
 ## 复现步骤
 

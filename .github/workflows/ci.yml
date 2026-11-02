@@ -1,4 +1,4 @@
-name: ci
+﻿name: ci
 
 on:
   push:
@@ -6,22 +6,24 @@ on:
   pull_request:
   workflow_dispatch:
 
-# 说明：本工作流只做"编译 + 正确性 + 溯源 + 报告结构"四项。
-# 不把 t 值/收敛性作为门禁——缓存侧信道测量对调度噪声极敏感，
-# 在共享 runner 上必然不稳定。完整实验属于手动/自托管任务（见 README「实验环境」）。
+# 边界说明：
+# 本工作流只验证「能编译、算法正确、源码可溯源、报告链路可用」。
+# **不执行任何计时的侧信道实验**——共享 runner 的调度噪声会让 t 值不可信，
+# 把 t 值当门禁只会得到一个随机红的流水线。
+# 完整实验（libs / compare / ttest / converge / attack / sweep）属于手动或自托管机器任务，
+# 见 .github/workflows/experiment.yml。
 
 jobs:
-  build-and-check:
+  smoke:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
 
       - name: 编译（MSVC）
         shell: pwsh
-        run: |
-          powershell -ExecutionPolicy Bypass -File .\build.ps1
+        run: powershell -ExecutionPolicy Bypass -File .\build.ps1
 
       - name: SM4 标准测试向量
         shell: pwsh
@@ -32,25 +34,23 @@ jobs:
 
       - name: 第三方源码溯源校验
         shell: pwsh
-        run: |
-          python .\tools\check_provenance.py
+        run: python .\tools\check_provenance.py
 
-      - name: 生成快速报告（小样本，仅验证生成链路）
+      - name: 生成报告（夹具模式，不跑计时实验）
         shell: pwsh
         run: |
-          python .\make_report.py --quick
+          python .\make_report.py --smoke
           python .\make_findings.py
 
       - name: 报告结构校验
         shell: pwsh
-        run: |
-          python .\tools\check_schema.py
+        run: python .\tools\check_schema.py
 
       - name: 上传报告产物
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: report-artifacts
+          name: report-smoke
           path: |
             report.json
             report.md
