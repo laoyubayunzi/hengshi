@@ -81,10 +81,19 @@ L.append("\n**证据范围（分两级）**：" + scope_sentence(rep) + "\n")
 
 L.append("**5. 不会乱报**\n")
 if fp.get("variants"):
-    clean = sum(v["reps"] for v in fp["variants"] if "table" not in v["name"].replace("const-time", ""))
-    leaky = sum(v["reps"] for v in fp["variants"] if "table" in v["name"].replace("const-time", ""))
-    L.append(f"{len(fp['variants'])} 个真值已知的实现：泄漏实现 {leaky}/{leaky} 轮越阈值，"
-             f"干净实现 0/{clean} 轮越阈值。**本轮实验未观察到假阳性**（样本量有限，不外推为总体假阳性率）。\n")
+    vs = fp["variants"]
+    leaky = [v for v in vs if not v.get("blind") and (v["verdict"] == "OK" and v["over"] * 2 > v["reps"])]
+    clean = [v for v in vs if not v.get("blind") and not (v["over"] * 2 > v["reps"])]
+    blind = [v for v in vs if v.get("blind")]
+    clean_runs_total = sum(v["reps"] for v in clean)
+    clean_over = sum(v["over"] for v in clean)
+    false_pos_impl = sum(1 for v in clean if v["over"] * 2 > v["reps"])
+    L.append(f"对照组共 {len(vs)} 个真值已知的实现，各 {vs[0]['reps']} 轮：")
+    L.append(f"- 单轮越阈值率（干净实现）：{clean_over}/{clean_runs_total} = "
+             f"{(100.0 * clean_over / clean_runs_total) if clean_runs_total else 0:.1f}%")
+    L.append(f"- 实现级误报：{false_pos_impl}/{len(clean)}（判据是「多轮过半越阈值」）")
+    if blind:
+        L.append(f"- 测量盲区：{sum(v['reps'] for v in blind)} 轮（无法 flush 其表，单独列出，不计入上面两项）")
 
 L.append("**6. 三个库，两份代码**\n")
 L.append("| 库 | 版本 | commit | 许可证 | 文件 | 字节 | 行数 | SHA-256（前 16） |")

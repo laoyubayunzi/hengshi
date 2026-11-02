@@ -605,40 +605,45 @@ static int cmd_libs(int n, int reps) {
     gmssl_sm4_key ktt;   sm4_set_encrypt_key(&ktt, K);
     tongsuo_sm4_key kts; ossl_sm4_set_key(K, &kts);
 
-    /* 三种口径并列，避免把"测不到"误读成"没有"：
-     *   GmSSL        pristine 构建，表是外部符号 → 可 flush（真实攻击者视野）
-     *   Tongsuo-obs  暴露内部表的构建（instrumented），表可 flush
-     *   Tongsuo-pri  pristine 构建，表为 static → 外部无法 flush，信号被缓存常驻掩盖
-     */
     struct { const char* name; uint64_t (*fn)(const void*, int); const void* key; } libs[] = {
         { "GmSSL", tt_fn, &ktt },
         { "Tongsuo-obs", tongsuo_fn, &kts },
         { "Tongsuo-pri", tongsuo_pristine_fn, &kts },
     };
+    const int nv = (int)(sizeof(libs) / sizeof(libs[0]));
 
-    printf("# 横向对比：%d 个口径，每个重复 %d 轮取中位，每类 %d 样本\n",
-           (int)(sizeof(libs)/sizeof(libs[0])), reps, n);
+    printf("# 横向对比：%d 个口径，每个重复 %d 轮（每类 %d 样本）\n", nv, reps, n);
     printf("# -obs = 暴露内部表的构建（可 flush）；-pri = pristine 构建（表为 static，外部无法 flush）\n");
-    for (unsigned i = 0; i < sizeof(libs)/sizeof(libs[0]); i++) {
-        double ts[16], eff = 0;
-        if (reps > 16) reps = 16;
-        for (int r = 0; r < reps; r++) {
+
+    for (int i = 0; i < nv; i++) {
+        double ts[32];
+        int r = reps > 32 ? 32 : reps;
+        for (int k = 0; k < r; k++) {
             stat_t sa, sb;
-            ts[r] = fabs(ttest_raw(libs[i].fn, libs[i].key, n, &sa, &sb));
-            eff = fabs((sb.mean - sa.mean) / sa.mean * 100.0);
+            ts[k] = fabs(ttest_raw(libs[i].fn, libs[i].key, n, &sa, &sb));
         }
-        double sorted[16];
-        memcpy(sorted, ts, sizeof(double) * (size_t)reps);
-        for (int a = 0; a < reps; a++)
-            for (int b = a + 1; b < reps; b++)
-                if (sorted[b] < sorted[a]) { double t = sorted[a]; sorted[a] = sorted[b]; sorted[b] = t; }
-        double med = sorted[reps / 2];
-        printf("LIB %s t=%.2f effect=%.3f\n", libs[i].name, med, eff);
-        printf("   %s：%s\n", libs[i].name, med > 4.5 ? "存在时序泄漏" : "未检出泄漏");
+        double sorted[32];
+        memcpy(sorted, ts, sizeof(double) * (size_t)r);
+        for (int a = 0; a < r; a++)
+            for (int b = a + 1; b < r; b++)
+                if (sorted[b] < sorted[a]) { double tmp = sorted[a]; sorted[a] = sorted[b]; sorted[b] = tmp; }
+        double med = sorted[r / 2], mx = sorted[r - 1], mn = sorted[0];
+        double eff = 0.0;
+        /* 效应量另测一轮，用于报告 */
+        {
+            stat_t sa, sb;
+            ttest_raw(libs[i].fn, libs[i].key, n, &sa, &sb);
+            eff = fabs(sa.mean - sb.mean) / (sb.mean != 0 ? sb.mean : 1.0) * 100.0;
+        }
+        const char* verdict = (med > 4.5) ? "LEAK" : "clean";
+        const char* stability = "";
+        if (med <= 4.5 && mx > 4.5) stability = " UNSTABLE";
+        printf("LIB %s t=%.2f min=%.2f max=%.2f effect=%.3f verdict=%s%s\n",
+               libs[i].name, med, mn, mx, eff, verdict, stability);
     }
+    printf("# UNSTABLE = 中位在阈值内但个别轮次越阈值，判定对机器状态敏感\n");
     return 0;
 }
-
 /* ------------------------------------------------------------------ 同库两种配置对比
  *
  * GmSSL 同一份源码，两种编译配置：

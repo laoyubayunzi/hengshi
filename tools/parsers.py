@@ -33,6 +33,16 @@ def parse_libs(out: str):
     """解析 `LIB <name> t=<x> effect=<y>` 行。"""
     libs = []
     for line in out.splitlines():
+        m = re.match(r"LIB\s+(\S+)\s+t=([\d.]+)\s+min=([\d.]+)\s+max=([\d.]+)\s+"
+                     r"effect=([\d.]+)\s+verdict=(LEAK|clean)(\s+UNSTABLE)?", line)
+        if m:
+            libs.append({"name": m.group(1), "t": float(m.group(2)),
+                         "min_t": float(m.group(3)), "max_t": float(m.group(4)),
+                         "effect_pct": float(m.group(5)),
+                         "verdict": m.group(6),
+                         "unstable": bool(m.group(7))})
+            continue
+        # 兼容旧格式
         m = re.match(r"LIB\s+(\S+)\s+t=([\d.]+)\s+effect=([\d.]+)", line)
         if m:
             t = float(m.group(2))

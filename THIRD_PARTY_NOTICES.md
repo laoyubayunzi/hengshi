@@ -62,6 +62,22 @@
 
 ---
 
+## 4. dudect（对照基准，非被测对象）
+
+| 项 | 内容 |
+|---|---|
+| 文件 | `src/thirdparty/dudect.h` |
+| 上游仓库 | https://github.com/oreparaz/dudect |
+| commit | `dc269651fb2567e46755cfb2a13d3875592968b5` |
+| 文件 SHA-256 | `3fb3b2bd7f9e17ae34b7c92518c1311c67342c56facc80da925d85f121b649da`（15227 字节） |
+| 许可证 | MIT |
+| 许可证原文 | https://github.com/oreparaz/dudect/blob/master/LICENSE |
+| 用途 | **同机对照基准**：直接编译上游 dudect，用它自己的 102 个检验判定同一批实现，不重写其算法 |
+| 本项目的改动 | **未修改源码**。Windows 适配通过三处本项目自有的兼容头与编译期重命名完成：<br>· `src/thirdparty/shim/x86intrin.h`（头名映射到 MSVC 的 `<intrin.h>`）<br>· `src/thirdparty/shim/unistd.h`（`open/read/sleep/close` 的编译期映射）<br>· 编译时 `-Drandombytes=...` 重命名上游 `/dev/urandom` 版本，改由 `tests/dudect_harness.c` 用 `BCryptGenRandom` 提供随机源 |
+
+> 上述三处都不改变 dudect 的统计逻辑：检验次数、百分位裁剪、阈值、判定条件全部来自上游。
+> 唯一的行为差异是随机数来源，这在 Windows 上无法避免。
+
 ## 关于"三库两实现"
 
 上述三个库中，Tongsuo 与 BabaSSL 的 SM4 源码字节级完全相同且指向同一 commit，

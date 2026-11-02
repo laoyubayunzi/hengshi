@@ -47,16 +47,17 @@ check("ttest 效应量取自第三个 run", (e_tt, e_ct) == (5.85, 0.01), f"got 
 check("ttest 空输出返回 None", parse_ttest("") == (None, None, None, None))
 
 # ---------------- libs
-libs_out = """# 横向对比
-LIB GmSSL t=19.55 effect=2.466
+libs_out = """# 横向对比：3 个口径
+LIB GmSSL t=6.09 min=2.91 max=10.23 effect=0.738 verdict=LEAK
    GmSSL：存在时序泄漏
 LIB Tongsuo t=44.86 effect=4.154
    Tongsuo：存在时序泄漏
 """
 libs = parse_libs(libs_out)
 check("libs 解析出两个库", len(libs) == 2)
-check("libs 名字与数值", libs[0]["name"] == "GmSSL" and abs(libs[0]["t"] - 19.55) < 1e-9)
-check("libs 判定", libs[1]["verdict"] == "LEAK")
+check("libs 名字与数值", libs[0]["name"] == "GmSSL" and abs(libs[0]["t"] - 6.09) < 1e-9)
+check("libs 判定", libs[0]["verdict"] == "LEAK")
+check("libs 跨轮范围", libs[0]["min_t"] == 2.91 and libs[0]["max_t"] == 10.23)
 check("libs 空输出", parse_libs("") == [])
 
 # ---------------- compare
