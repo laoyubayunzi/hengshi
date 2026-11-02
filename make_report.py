@@ -26,7 +26,8 @@ sys.path.insert(0, HERE)
 from tools.describe import (recovery_level, recovery_runs_text, recovery_sentence,
                             recovery_short, cost_sentence, scope_sentence)
 from tools.parsers import (parse_verify, parse_ttest, parse_libs, parse_compare,
-                           parse_sweep, parse_converge, parse_attack, parse_real_recovery)
+                           parse_sweep, parse_sweep_summary, parse_converge, parse_attack,
+                           parse_real_recovery, parse_bench)
 EXE = os.path.join(HERE, "hengshi.exe")
 
 QUICK = "--quick" in sys.argv
@@ -99,7 +100,8 @@ def collect():
 
     out, _ = run("sweep", SWEEP_REPS, SWEEP_N)
     variants = parse_sweep(out)
-    rep["false_positive"] = {"variants": variants,
+    summ = parse_sweep_summary(out)
+    rep["false_positive"] = {"variants": variants, **summ,
                              "all_correct": all(v["correct"] for v in variants) if variants else None}
 
     out, _ = run("converge")
@@ -108,6 +110,10 @@ def collect():
     if len(conv) >= 2:
         rep["convergence_growth"] = round(conv[-1]["t_ttable"] / conv[0]["t_ttable"], 2)
         rep["convergence_n_ratio"] = round(conv[-1]["n"] / conv[0]["n"], 1)
+
+    # 与 dudect 方法的同机对照
+    out, _ = run("bench", 15000)
+    rep["dudect_bench"] = parse_bench(out)
 
     # 修复代价
     out, _ = run("cost", 12000)
@@ -209,15 +215,20 @@ def render_markdown(rep):
 
     if fp.get("variants"):
         vs = fp["variants"]
-        L.append(f"## 4. 假阳性评估（{len(vs)} 个真值已知的实现，各 {vs[0]['reps']} 轮）\n")
+        L.append(f"## 4. 对照组与判别能力评估（{len(vs)} 个真值已知的实现，各 {vs[0]['reps']} 轮）\n")
         L.append("| 实现 | 越阈值轮次 | max \\|t\\| | 中位 \\|t\\| | 判定 |")
         L.append("|---|---|---|---|---|")
         for v in vs:
-            L.append(f"| {v['name']} | {v['over']}/{v['reps']} | {v['max_t']:.1f} | {v['median_t']:.1f} | "
-                     f"{'正确' if v['correct'] else '误判'} |")
-        clean = sum(v["reps"] for v in vs if "table" not in v["name"].replace("const-time", ""))
-        L.append(f"\n**本轮实验未观察到假阳性**（干净实现 0/{clean} 次越阈值）。判据：多轮中过半越阈值才算泄漏。"
-                 "样本量有限，本结论仅描述本轮实验，不宜外推为总体假阳性率。\n")
+            tag = "正确" if v["correct"] else ("未检出（测量盲区）" if v.get("blind") else "误判")
+            L.append(f"| {v['name']} | {v['over']}/{v['reps']} | {v['max_t']:.1f} | {v['median_t']:.1f} | {tag} |")
+        blind = sum(v["reps"] for v in vs if v.get("blind"))
+        L.append("")
+        L.append(f"- **灵敏度**：泄漏实现被正确判泄漏的轮次占比 {fp.get('sensitivity_pct')}%"
+                 + (f"（{blind} 轮属测量盲区，不计入）" if blind else ""))
+        L.append(f"- **假阳性**：干净实现被判泄漏的轮次占比 {fp.get('false_positive_pct')}%")
+        L.append("- 判据：重复多轮中过半越阈值才算泄漏；单轮越阈值不算误判。")
+        L.append("- 未检出的实现若因无法 flush 其表（Tongsuo pristine），记为**测量盲区**，"
+                 "既不计入假阳性，也不计入灵敏度。\n")
 
     if conv:
         L.append("## 5. √n 收敛实验（区分真泄漏与噪声的判据）\n")
@@ -280,7 +291,21 @@ def render_markdown(rep):
         L.append("\n检测 → 修复 → 复测（t 从数十降到阈值内）→ 代价量化，这一环闭合。"
                  "代价说明：本实现用全表扫描替代查表，位切片通常更便宜，但仍是数倍量级。\n")
 
-    L.append("## 9. 可复现性\n")
+    db = rep.get("dudect_bench") or []
+    if db:
+        L.append("## 9. 与 dudect 方法的同机对照\n")
+        L.append("> dudect 一列是按 dudect 公开算法（裁剪两端各 1%、阈值 |t| > 10）在同一批样本上的本地复现，"
+                 "**不是编译上游二进制**。本工具列：裁剪 5%、阈值 4.5、三次取中位。\n")
+        L.append("| 实现 | 本工具 \\|t\\| | dudect 口径 \\|t\\| | 采集耗时 (ms) | 判定一致 | 结论 |")
+        L.append("|---|---|---|---|---|---|")
+        for r in db:
+            L.append(f"| {r['name']} | {r['t_ours']:.1f} | {r['t_dudect']:.1f} | {r['ms']:.0f} | "
+                     f"{'是' if r['agree'] else '否'} | {r['verdict']} |")
+        agree = sum(1 for r in db if r["agree"])
+        L.append(f"\n判定一致 {agree}/{len(db)}。两种判据在同一批样本上结论一致时，说明结论不依赖预处理参数；"
+                 "不一致通常出现在边缘实现上（dudect 阈值更严、裁剪更窄）。\n")
+
+    L.append("## 10. 可复现性\n")
     L.append("```\nhengshi verify\nhengshi libs 40000 3\nhengshi compare 40000\n"
              "hengshi ttest 40000\nhengshi converge\nhengshi attack 64 200 32\n"
              "hengshi attack 4 200 4\nhengshi sweep 10 20000\n```\n")

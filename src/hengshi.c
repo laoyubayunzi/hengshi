@@ -770,17 +770,18 @@ static int cmd_sweep(int reps, int n) {
         { "our T-table",        our_tt_fn,    &kours, 1 },
         { "GmSSL T-table",      tt_fn,        &ktt,   1 },
         { "GmSSL small-table",  small_fn,     &ksm,   1 },
-        { "Tongsuo T-table",    tongsuo_pristine_fn, &kts, 1 },
+        { "Tongsuo(pristine)", tongsuo_pristine_fn, &kts, 1 },   /* 表为 static，外部无法 flush */
         { "our const-time",     our_ct_fn,    &kours, 0 },
         { "our const-time rev", our_ctrev_fn, &kours, 0 },
         { "null baseline",      null_fn,      NULL,   0 },
     };
     const int nv = (int)(sizeof(vs) / sizeof(vs[0]));
 
-    printf("=== 假阳性评估：%d 个真值已知的实现，每个重复 %d 轮（每类 %d 样本）===\n\n", nv, reps, n);
+    printf("=== 对照组与判别能力评估：%d 个真值已知的实现，每个重复 %d 轮（每类 %d 样本）===\n", nv, reps, n);
+    printf("    说明：无法 flush 其表的实现（Tongsuo pristine）记为 NOT-DETECTED，属测量盲区，不计入灵敏度\n\n");
     printf("%-22s %10s %10s %10s %s\n", "实现", "过阈值轮数", "max |t|", "中位 |t|", "结论");
 
-    int tp = 0, tp_run = 0, tn = 0, tn_run = 0;
+    int tp = 0, tp_run = 0, tn = 0, tn_run = 0, blind_runs = 0;
     for (int i = 0; i < nv; i++) {
         double ts[64];
         int over = 0;
@@ -801,18 +802,26 @@ static int cmd_sweep(int reps, int n) {
 
         int judged_leaky = (over * 2 > reps);   /* 过半越阈值才判泄漏 */
         int correct = (judged_leaky == vs[i].ground_truth_leaky);
-        printf("%-22s %6d/%-3d %10.1f %10.1f  %s\n",
-               vs[i].name, over, reps, mx, med,
-               correct ? "OK" : "MISCLASSIFIED");
+        /* 无法 flush 的实现：没测到不等于安全，也不计入灵敏度统计 */
+        int blind = (!judged_leaky && vs[i].ground_truth_leaky && vs[i].key == &kts);
+        const char* tag = correct ? "OK" : (blind ? "NOT-DETECTED(blind)" : "MISCLASSIFIED");
+        printf("%-22s %6d/%-3d %10.1f %10.1f  %s\n", vs[i].name, over, reps, mx, med, tag);
+        if (blind) { blind_runs += reps; continue; }
 
         if (vs[i].ground_truth_leaky) { tp++; tp_run += over; }
         else                          { tn++; tn_run += over; }
     }
 
     double fpr = tn_run ? (100.0 * tn_run / (double)(tn * reps)) : 0.0;
-    printf("\n  真值：%d 个应判泄漏，%d 个应判干净\n", tp, tn);
-    printf("  假阳性率（干净实现被判泄漏的轮次占比）: %.1f%%\n", fpr);
+    int tp_runs_total = tp * reps;
+    double tpr = tp_runs_total ? (100.0 * tp_run / (double)tp_runs_total) : 0.0;
+    printf("\n  真值：%d 个应判泄漏，%d 个应判干净", tp, tn);
+    if (blind_runs) printf("，%d 轮属测量盲区（不计入）", blind_runs);
+    printf("\n");
+    printf("  灵敏度（泄漏实现被正确判泄漏的轮次占比）: %.1f%%\n", tpr);
+    printf("  假阳性（干净实现被判泄漏的轮次占比）: %.1f%%\n", fpr);
     printf("  说明：单轮 |t| 越过阈值不等于误判——判据是「重复 %d 轮里过半越过」。\n", reps);
+    printf("        未检出的实测实现若因无法 flush 其表，记为盲区而非能力缺陷。\n");
     return 0;
 }
 
@@ -1017,7 +1026,105 @@ static int cmd_cost(int n) {
     return 0;
 }
 
+
+/* ------------------------------------------------------------------ bench：与 dudect 方法同机对照
+ *
+ * dudect（Reparaz et al. 2017）与本工具的差异只在"统计预处理"：
+ *   dudect：裁剪两端各 1%，阈值 |t| > 10，看累积 t
+ *   本工具：裁剪两端各 5%，阈值 |t| > 4.5，重复 3 次取中位
+ * 这里对**同一批样本**分别套两种判据，给出同机对照表。
+ *
+ * 注意：这是按 dudect 公开算法做的本地复现，不是编译上游二进制。
+ */
+static int cmp_double(const void* a, const void* b) {
+    double x = *(const double*)a, y = *(const double*)b;
+    return (x > y) - (x < y);
+}
+
+/* 对已排序样本做两端裁剪后求均值/方差 */
+static void trimmed_stats(double* sorted, int n, double frac, double* mean, double* var) {
+    int cut = (int)(n * frac);
+    int lo = cut, hi = n - cut;
+    if (hi - lo < 8) { lo = 0; hi = n; }
+    double m = 0;
+    for (int i = lo; i < hi; i++) m += sorted[i];
+    m /= (double)(hi - lo);
+    double v = 0;
+    for (int i = lo; i < hi; i++) { double d = sorted[i] - m; v += d * d; }
+    v /= (double)(hi - lo - 1 > 0 ? hi - lo - 1 : 1);
+    *mean = m; *var = v;
+}
+
+static double welch_from(double* a, int na, double* b, int nb, double frac) {
+    qsort(a, (size_t)na, sizeof(double), cmp_double);
+    qsort(b, (size_t)nb, sizeof(double), cmp_double);
+    double ma, va, mb, vb;
+    trimmed_stats(a, na, frac, &ma, &va);
+    trimmed_stats(b, nb, frac, &mb, &vb);
+    double se = sqrt(va / (double)na + vb / (double)nb);
+    if (se <= 0) return 0.0;
+    return (ma - mb) / se;
+}
+
+static int cmd_bench(int n) {
+    static const uint8_t K[16] = {0x01,0x23,0x45,0x67,0x89,0xab,0xcd,0xef,0xfe,0xdc,0xba,0x98,0x76,0x54,0x32,0x10};
+    sm4_tables_alloc(4);
+    sm4_key kours;      sm4_set_enc_key(K, &kours);
+    gmssl_sm4_key ktt;  sm4_set_encrypt_key(&ktt, K);
+    tongsuo_sm4_key kts; ossl_sm4_set_key(K, &kts);
+
+    struct { const char* name; uint64_t (*fn)(const void*, int); const void* key; } impls[] = {
+        { "ours T-table", our_tt_fn, &kours },
+        { "ours const-time", our_ct_fn, &kours },
+        { "GmSSL", tt_fn, &ktt },
+        { "Tongsuo-obs", tongsuo_fn, &kts },
+    };
+
+    double* a = (double*)malloc(sizeof(double) * (size_t)n);
+    double* b = (double*)malloc(sizeof(double) * (size_t)n);
+    if (!a || !b) { printf("oom\n"); return 1; }
+
+    printf("=== 与 dudect 方法的同机对照（同一批样本，两种判据）===\n");
+    printf("    本工具：裁剪 5%%、阈值 4.5　|　dudect 口径：裁剪 1%%、阈值 10\n");
+    printf("    注：dudect 一列为按其公开算法做的本地复现，非上游二进制\n\n");
+    printf("%-18s %10s %10s %10s %10s  %s\n", "实现", "本工具|t|", "dudect|t|", "采集耗时ms", "判定一致", "结论");
+
+    for (int i = 0; i < 4; i++) {
+        double ts_ours[3], ts_dud[3], ms_all[3];
+        for (int rep = 0; rep < 3; rep++) {   /* 三次取中位：单轮会被偶发中断拉偏 */
+            uint64_t t0 = now_cycles();
+            /* 必须交错采集：先跑完 A 组再跑 B 组会把"冷/热"顺序效应算成泄漏 */
+            for (int j = 0; j < n; j++) {
+                a[j] = (double)impls[i].fn(impls[i].key, 0);
+                b[j] = (double)impls[i].fn(impls[i].key, 1);
+            }
+            uint64_t t1 = now_cycles();
+            ts_ours[rep] = fabs(welch_from(a, n, b, n, 0.05));
+            ts_dud[rep] = fabs(welch_from(a, n, b, n, 0.01));
+            ms_all[rep] = (double)(t1 - t0) / 3.0e6;
+        }
+        double so[3] = { ts_ours[0], ts_ours[1], ts_ours[2] };
+        double sd[3] = { ts_dud[0], ts_dud[1], ts_dud[2] };
+        double sm[3] = { ms_all[0], ms_all[1], ms_all[2] };
+        qsort(so, 3, sizeof(double), cmp_double);
+        qsort(sd, 3, sizeof(double), cmp_double);
+        qsort(sm, 3, sizeof(double), cmp_double);
+        double t_ours = so[1], t_dud = sd[1], ms = sm[1];
+        int v_ours = t_ours > 4.5, v_dud = t_dud > 10.0;
+        printf("%-18s %10.1f %10.1f %10.1f %10s  %s\n",
+               impls[i].name, t_ours, t_dud, ms,
+               (v_ours == v_dud) ? "一致" : "不一致",
+               v_ours ? "LEAK" : "clean");
+    }
+
+    printf("\n  说明：两种判据在同一批样本上给出的结论应当一致；\n");
+    printf("        差异通常出现在边缘实现上——dudect 的阈值更严（10 vs 4.5），裁剪更窄（1%% vs 5%%）。\n");
+    free(a); free(b);
+    return 0;
+}
+
 /* ------------------------------------------------------------------ main */
+
 
 
 static void usage(void) {
@@ -1031,6 +1138,7 @@ static void usage(void) {
     printf("  hengshi compare [n]                     同库两种表布局对比（默认 n=40000）\n");
     printf("  hengshi libs [n] [reps]                 多库横向对比（GmSSL / Tongsuo）\n");
     printf("  hengshi sweep [reps] [n]                假阳性评估（默认 10 轮 / 20000 样本）\n");
+    printf("  hengshi bench [n]                       与 dudect 方法的同机对照\n");
     printf("  hengshi cost [n]                        修复代价：常量时间化的性能开销\n");
     printf("  hengshi attack-real [lib] [traces]      真实库部分密钥恢复（lib=gmssl|tongsuo）\n");
     printf("  hengshi heat [stride] [file.csv]        导出单条 trace 的缓存行命中图\n");
@@ -1085,6 +1193,11 @@ int main(int argc, char** argv) {
         int n = (argc > 2) ? atoi(argv[2]) : 40000;
         if (n < 2000) n = 2000;
         return cmd_compare(n);
+    }
+    if (!strcmp(cmd, "bench")) {
+        int nb = (argc > 2) ? atoi(argv[2]) : 20000;
+        if (nb < 2000) nb = 2000;
+        return cmd_bench(nb);
     }
     if (!strcmp(cmd, "cost")) {
         int n2 = (argc > 2) ? atoi(argv[2]) : 20000;

@@ -53,12 +53,28 @@ def parse_sweep(out: str):
     """解析假阳性评估的表格行。"""
     variants = []
     for line in out.splitlines():
-        m = re.match(r"(.+?)\s+(\d+)/(\d+)\s+([\d.]+)\s+([\d.]+)\s+(OK|MISCLASSIFIED)\s*$", line)
+        m = re.match(r"(.+?)\s+(\d+)/(\d+)\s+([\d.]+)\s+([\d.]+)\s+"
+                     r"(OK|MISCLASSIFIED|NOT-DETECTED\(blind\))\s*$", line)
         if m:
+            tag = m.group(6)
             variants.append({"name": m.group(1).strip(), "over": int(m.group(2)), "reps": int(m.group(3)),
                              "max_t": float(m.group(4)), "median_t": float(m.group(5)),
-                             "correct": m.group(6) == "OK"})
+                             "verdict": tag,
+                             "correct": tag == "OK",
+                             "blind": tag.startswith("NOT-DETECTED")})
     return variants
+
+
+def parse_sweep_summary(out: str):
+    """解析灵敏度和假阳性两行。"""
+    d = {}
+    m = re.search(r"灵敏度（[^）]*）: ([\d.]+)%", out)
+    if m:
+        d["sensitivity_pct"] = float(m.group(1))
+    m = re.search(r"假阳性（[^）]*）: ([\d.]+)%", out)
+    if m:
+        d["false_positive_pct"] = float(m.group(1))
+    return d
 
 
 def parse_converge(out: str):
@@ -101,3 +117,15 @@ def parse_real_recovery(out: str):
         "per_byte": [{"byte": int(b), "true_hi": t, "best_hi": g, "score": int(sc)}
                      for b, t, g, sc in pairs],
     }
+
+
+def parse_bench(out: str):
+    """解析与 dudect 方法的同机对照表。"""
+    rows = []
+    for line in out.splitlines():
+        m = re.match(r"(\S.*?)\s{2,}([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+(一致|不一致)\s+(LEAK|clean)\s*$", line)
+        if m:
+            rows.append({"name": m.group(1).strip(), "t_ours": float(m.group(2)),
+                         "t_dudect": float(m.group(3)), "ms": float(m.group(4)),
+                         "agree": m.group(5) == "一致", "verdict": m.group(6)})
+    return rows

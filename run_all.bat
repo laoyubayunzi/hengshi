@@ -43,6 +43,7 @@ if errorlevel 1 (
 ) else (
     python make_report.py
     python sync_readme.py
+python sync_docs.py
     python make_findings.py
     python viz.py
     python make_docx.py
