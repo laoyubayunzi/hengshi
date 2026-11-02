@@ -40,9 +40,17 @@ jobs:
       - name: SM4 标准测试向量
         shell: pwsh
         run: |
+          # 注意：$out 是字符串数组，对数组用 -notmatch 得到的是"元素过滤"而不是布尔值，
+          # 直接放进 if 会恒为真。这里改为看退出码 + 单字符串匹配。
           $out = & .\hengshi.exe verify
           $out | Write-Output
-          if ($out -notmatch 'OK' -or $out -match 'FAIL') { throw 'SM4 标准向量未通过' }
+          $code = $LASTEXITCODE
+          $text = ($out | Out-String)
+          $expected = '681edf34d206965e86b3e94f536e4246'
+          if ($code -ne 0) { throw "verify 退出码 $code" }
+          if ($text -notmatch $expected) { throw "未找到期望密文 $expected" }
+          if ($text -match 'FAIL') { throw '输出包含 FAIL' }
+          Write-Output "SM4 标准向量通过（exit 0）"
 
       - name: 第三方源码溯源校验
         shell: pwsh
