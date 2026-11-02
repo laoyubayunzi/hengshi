@@ -56,6 +56,27 @@ jobs:
           if ($text -match 'FAIL') { throw '输出包含 FAIL' }
           Write-Output "SM4 标准向量通过（exit 0）"
 
+      - name: 依赖预检
+        shell: pwsh
+        run: python .\tools\check_deps.py
+
+      - name: 单元测试（C 内核，确定性）
+        shell: pwsh
+        run: |
+          # 直接调 cl，避免依赖 build.ps1 的产物
+          $vcvars = Get-ChildItem 'C:\Program Files*\Microsoft Visual Studio\*\*\VC\Auxiliary\Build\vcvars64.bat' |
+            Select-Object -First 1 -ExpandProperty FullName
+          cmd /c "call `"$vcvars`" >nul 2>&1 && cl /nologo /utf-8 /O2 /MT /Fe:tests\test_sm4.exe tests\test_sm4.c src\sm4.c"
+          if ($LASTEXITCODE -ne 0) { throw "单元测试编译失败" }
+          & .\tests\test_sm4.exe
+          if ($LASTEXITCODE -ne 0) { throw "C 单元测试失败" }
+
+      - name: 单元测试（Python 解析器，确定性）
+        shell: pwsh
+        run: |
+          python .\tests\test_parsers.py
+          if ($LASTEXITCODE -ne 0) { throw "解析器单元测试失败" }
+
       - name: 第三方源码溯源校验
         shell: pwsh
         run: python .\tools\check_provenance.py

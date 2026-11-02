@@ -36,8 +36,15 @@
 | 许可证原文 | https://github.com/Tongsuo-Project/Tongsuo/blob/8.5.0/LICENSE.txt |
 | 本项目的改动 | **未修改源码内容**。编译时以 `/Dstatic=` 把内部 `static` 表暴露为外部符号，以便缓存观测代码取到表地址；另提供最小兼容头 `src/thirdparty/tongsuo/openssl/e_os2.h` 与 `src/thirdparty/tongsuo/crypto/sm4.h`（本项目原创） |
 
-> `/Dstatic=` 只影响 `static` 关键字的预处理展开，不改变任何算法逻辑、表内容或执行顺序。
-> 这一点对测量结论至关重要，故在此显式声明。
+> **关于 `/Dstatic=` 的必要说明**：它只影响 `static` 关键字的预处理展开，不改变算法逻辑与表内容，
+> 但**会改变代码生成**。本项目用反汇编核对过：`ossl_sm4_encrypt` 的 830 条指令中有 21 行调度不同。
+>
+> 因此本项目编译两份 Tongsuo：
+> - **pristine**（与上游默认编译一致）用于**统计泄漏检测**，保证结论对真实发布的库成立；
+> - **`/Dstatic=`**（表地址可见）用于**缓存观测与部分恢复**。
+>
+> 详见 `技术说明.md` 6.7 节，其中给出两种构建在同一台机器上的实测差异（t=53.6 vs t=0.62）。
+> 后者不代表"安全"，而是"外部观测者无法 flush 其表"造成的测量盲区。
 
 ## 3. BabaSSL
 

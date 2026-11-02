@@ -18,6 +18,12 @@ if (-not $vcvars) { throw 'vcvars64.bat not found - need MSVC' }
 $common = '/nologo /utf-8 /O2 /W3 /MT /I src\thirdparty'
 
 # 小表配置：把对外符号全部改名，避免与 T-table 版本冲突
+$ts_plain_renames = @(
+    '/Dossl_sm4_encrypt=ts_plain_encrypt',
+    '/Dossl_sm4_decrypt=ts_plain_decrypt',
+    '/Dossl_sm4_set_key=ts_plain_set_key'
+) -join ' '
+
 $renames = @(
     '/DENABLE_SMALL_FOOTPRINT=1',
     '/DS=gmssl_small_S',
@@ -37,7 +43,8 @@ $cmd = "call `"$vcvars`" >nul 2>&1 && cd /d `"$here`" && " +
        "cl $common /c src\thirdparty\gmssl_sm4.c /Fo:gmssl_tt.obj && " +
        "cl $common $renames /c src\thirdparty\gmssl_sm4.c /Fo:gmssl_small.obj && " +
        "cl $common /I src\thirdparty\tongsuo /Dstatic= /DSM4_S=TS_SM4_S /c src\thirdparty\tongsuo_sm4.c /Fo:tongsuo.obj && " +
-       "link /nologo hengshi.obj sm4.obj gmssl_tt.obj gmssl_small.obj tongsuo.obj /OUT:hengshi.exe"
+       "cl $common /I src\thirdparty\tongsuo $ts_plain_renames /c src\thirdparty\tongsuo_sm4.c /Fo:tongsuo_plain.obj && " +
+       "link /nologo hengshi.obj sm4.obj gmssl_tt.obj gmssl_small.obj tongsuo.obj tongsuo_plain.obj /OUT:hengshi.exe"
 
 cmd /c $cmd
 if ($LASTEXITCODE -ne 0) { throw "build failed ($LASTEXITCODE)" }

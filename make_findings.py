@@ -76,18 +76,33 @@ add("自然布局（16 项/缓存行）下只能得到表索引高 4 bit，无�
     "GM/T 0028-2014（条款号按实际版本核对）",
     kind="boundary", detection="leak", exploit="部分信息恢复")
 
-for L in (rep.get("libs") or []):
+# 只为"统计判为泄漏"的口径建发现；判为 clean 的口径不写成泄漏（那是测量盲区，不是结论）
+_pri = {x["name"]: x for x in (rep.get("libs") or [])}
+for L in [x for x in (rep.get("libs") or []) if x["verdict"] == "LEAK"]:
+    rr = (rep.get("real_recovery") or {}).get(L["name"].lower(), {})
+    matched = rr.get("matched")
+    total = rr.get("total")
+    exploit = "部分信息恢复" if (matched == total and total) else "未验证"
+    extra = []
+    if exploit == "部分信息恢复":
+        extra.append(f"在此基础上完成部分密钥恢复：恢复 rk[0] 全部 4 个字节的高 4 bit（{matched}/{total}），共 16 bit")
+    else:
+        extra.append(f"同一方法在该库上未收敛（{matched}/{total}），原因待查（可能与其表未按行对齐有关），如实记为未验证")
     add(f"{L['name']} 官方 SM4 实现存在可测的时序泄漏",
         f"{L['name']} 上游 SM4 实现（官方源码，未改写，标准向量通过）",
         L["t"], L["effect_pct"],
-        [f"Welch t = {L['t']:.2f}（重复 3 次取中位）",
-         f"效应量 {L['effect_pct']:.2f}%",
-         "T 表位于只读段，攻击者只能观测；这正是共享主机场景"],
-        f"表明存在数据相关时序通道；能否进一步用于密钥恢复尚需单独验证。效应量 {L['effect_pct']:.2f}% 说明优化削弱但未消除泄漏",
+        ([f"Welch t = {L['t']:.2f}（重复 3 次取中位）",
+          f"效应量 {L['effect_pct']:.2f}%",
+          "T 表位于只读段，攻击者只能观测；这正是共享主机场景"]
+         + ([f"同源码 pristine 构建在无法 flush 表的情况下 t≈{_pri['Tongsuo-pri']['t']:.1f}"
+             "（一阶缓存信号被表常驻 L1 掩盖，属测量盲区，不代表该构建安全）"]
+            if L["name"].startswith("Tongsuo") and "Tongsuo-pri" in _pri else [])),
+        "；".join(extra) + f"。效应量 {L['effect_pct']:.2f}% 说明优化削弱但未消除泄漏",
         "改用位切片（bitslice）或恒定地址访问实现，消除访存地址与数据的相关性。"
         "注意：把表项按缓存行对齐并不会缓解问题——它会把单次可观测位从 4 bit 提升到 8 bit（见 HS 报告中的布局实验），属于放大攻面，不应作为加固手段",
         "本工具已提供常量时间替代实现的对照测量方法，可用于复测",
-        "GM/T 0028-2014（条款号按实际版本核对）")
+        "GM/T 0028-2014（条款号按实际版本核对）",
+        exploit=exploit)
 
 cl = rep.get("compare_layouts") or {}
 sm = cl.get("gmssl_small") or {}

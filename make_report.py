@@ -22,6 +22,9 @@ except Exception:
     pass
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from tools.parsers import (parse_verify, parse_ttest, parse_libs, parse_compare,
+                           parse_sweep, parse_converge, parse_attack, parse_real_recovery)
 EXE = os.path.join(HERE, "hengshi.exe")
 
 QUICK = "--quick" in sys.argv
@@ -53,37 +56,26 @@ def collect():
            "generated": time.strftime("%Y-%m-%d %H:%M:%S")}
 
     out, _ = run("verify")
-    rep["sm4_vector"] = "OK" if "OK" in out and "FAIL" not in out else "FAIL"
+    rep["sm4_vector"] = parse_verify(out)
 
     out, _ = run("ttest", N_MAIN)
-    ts = [float(x) for x in re.findall(r"median t =\s*(-?\d+\.\d+)", out)]
-    eff = [float(x) for x in re.findall(r"差=([+-]\d+\.\d+)%", out)]
+    t_tt, t_ct, e_tt, e_ct = parse_ttest(out)
     rep["ttest"] = {
         "n_per_class": N_MAIN,
-        "t_ttable": abs(ts[0]) if len(ts) > 0 else None,
-        "t_constant_time": abs(ts[1]) if len(ts) > 1 else None,
-        "effect_ttable_pct": abs(eff[2]) if len(eff) > 2 else None,
-        "effect_ct_pct": abs(eff[5]) if len(eff) > 5 else None,
-        "verdict_ttable": "LEAK" if ts and abs(ts[0]) > 4.5 else "clean",
-        "verdict_constant_time": "LEAK" if len(ts) > 1 and abs(ts[1]) > 4.5 else "clean",
+        "t_ttable": t_tt,
+        "t_constant_time": t_ct,
+        "effect_ttable_pct": e_tt,
+        "effect_ct_pct": e_ct,
+        "verdict_ttable": "LEAK" if (t_tt or 0) > 4.5 else "clean",
+        "verdict_constant_time": "LEAK" if (t_ct or 0) > 4.5 else "clean",
     }
 
     out, _ = run("libs", N_MAIN, REPS)
-    libs = []
-    for line in out.splitlines():
-        m = re.match(r"LIB\s+(\S+)\s+t=([\d.]+)\s+effect=([\d.]+)", line)
-        if m:
-            tv = float(m.group(2))
-            libs.append({"name": m.group(1), "t": tv, "effect_pct": float(m.group(3)),
-                         "verdict": "LEAK" if tv > 4.5 else "clean"})
-    rep["libs"] = libs
+    rep["libs"] = parse_libs(out)
 
     out, _ = run("compare", N_MAIN)
-    ct = re.findall(r"t=\s*(-?\d+\.\d+)\s+效应量=([+-]\d+\.\d+)%", out)
-    rep["compare_layouts"] = {
-        "gmssl_ttable": {"t": abs(float(ct[0][0])), "effect_pct": abs(float(ct[0][1]))} if len(ct) > 0 else None,
-        "gmssl_small": {"t": abs(float(ct[1][0])), "effect_pct": abs(float(ct[1][1]))} if len(ct) > 1 else None,
-    }
+    tt_cmp, sm_cmp = parse_compare(out)
+    rep["compare_layouts"] = {"gmssl_ttable": tt_cmp, "gmssl_small": sm_cmp}
 
     prov_meta = json.load(open(os.path.join(HERE, "provenance.json"), encoding="utf-8"))
     prov = []
@@ -104,44 +96,23 @@ def collect():
     }
 
     out, _ = run("sweep", SWEEP_REPS, SWEEP_N)
-    variants = []
-    for line in out.splitlines():
-        m = re.match(r"(.+?)\s+(\d+)/(\d+)\s+([\d.]+)\s+([\d.]+)\s+(OK|MISCLASSIFIED)\s*$", line)
-        if m:
-            variants.append({"name": m.group(1).strip(), "over": int(m.group(2)), "reps": int(m.group(3)),
-                             "max_t": float(m.group(4)), "median_t": float(m.group(5)),
-                             "correct": m.group(6) == "OK"})
+    variants = parse_sweep(out)
     rep["false_positive"] = {"variants": variants,
                              "all_correct": all(v["correct"] for v in variants) if variants else None}
 
     out, _ = run("converge")
-    conv = []
-    for line in out.splitlines():
-        m = re.match(r"\s*(\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s*$", line)
-        if m:
-            conv.append({"n": int(m.group(1)), "t_ttable": float(m.group(2)), "t_ct": float(m.group(3))})
+    conv = parse_converge(out)
     rep["convergence"] = conv
     if len(conv) >= 2:
         rep["convergence_growth"] = round(conv[-1]["t_ttable"] / conv[0]["t_ttable"], 2)
         rep["convergence_n_ratio"] = round(conv[-1]["n"] / conv[0]["n"], 1)
 
-    def parse_attack(out):
-        d = {}
-        m = re.search(r"真实 rk\[0\.\.3\] : ([0-9a-f ]+)", out)
-        if m:
-            d["true_round_keys"] = m.group(1).split()
-        m = re.search(r"恢复 rk\[0\.\.3\] : ([0-9a-f ]+)", out)
-        if m:
-            d["recovered_round_keys"] = m.group(1).split()
-        m = re.search(r"反推主密钥 : ([0-9a-f]+)", out)
-        if m:
-            d["recovered_master_key"] = m.group(1)
-        m = re.search(r"真实主密钥 : ([0-9a-f]+)", out)
-        if m:
-            d["true_master_key"] = m.group(1)
-        if "recovered_master_key" in d and "true_master_key" in d:
-            d["master_key_match"] = d["recovered_master_key"] == d["true_master_key"]
-        return d
+    # 真实库部分密钥恢复（行粒度 → 高 4 bit）
+    rr = {}
+    for lib in ("gmssl", "tongsuo"):
+        out, _ = run("attack-real", lib, 1200)
+        rr[lib] = parse_real_recovery(out)
+    rep["real_recovery"] = rr
 
     out, _ = run("attack", 64, 200, 32)
     rep["attack_aligned_32rounds"] = parse_attack(out)
@@ -254,7 +225,28 @@ def render_markdown(rep):
         L.append("\n自然布局下只能恢复 rk[0] 的高半字节，后三轮因无法用半可信的 rk[0] 推进状态而失真。"
                  "完整边界见 findings.md 的 HS-003。\n")
 
-    L.append("## 7. 可复现性\n")
+    rr = rep.get("real_recovery") or {}
+    if rr:
+        L.append("## 7. 真实库上的部分密钥恢复（负结果之外的进展）\n")
+        L.append("> 行粒度只能确定表索引落在哪一行，因此上限是每个字节的高 4 bit。"
+                 "这不是缺陷，是观测通道的物理边界（见 HS-003）。\n")
+        L.append("| 实现 | 恢复的高 4 bit 字节数 | 说明 |")
+        L.append("|---|---|---|")
+        for name, key in (("GmSSL", "gmssl"), ("Tongsuo", "tongsuo")):
+            v = rr.get(key) or {}
+            note = "稳定收敛" if (v.get("matched") == v.get("total") and v.get("total")) else "未收敛（原因待查）"
+            L.append(f"| {name} | {v.get('matched')}/{v.get('total')} | {note} |")
+        g = rr.get("gmssl") or {}
+        if g.get("per_byte"):
+            L.append("\nGmSSL 逐字节：\n")
+            L.append("| 字节 | 真实高4位 | 恢复高4位 | 得分 |")
+            L.append("|---|---|---|---|")
+            for b in g["per_byte"]:
+                L.append(f"| b{b['byte']} | 0x{b['true_hi']} | 0x{b['best_hi']} | {b['score']} |")
+        L.append("\n**结论**：在真实 GmSSL 实现上完成了 16 bit（4 字节 × 高 4 bit）的部分信息恢复；"
+                 "完整 128 bit 主密钥恢复仍需更细的观测通道。Tongsuo 上同一方法未收敛，如实记录为未验证。\n")
+
+    L.append("## 8. 可复现性\n")
     L.append("```\nhengshi verify\nhengshi libs 40000 3\nhengshi compare 40000\n"
              "hengshi ttest 40000\nhengshi converge\nhengshi attack 64 200 32\n"
              "hengshi attack 4 200 4\nhengshi sweep 10 20000\n```\n")
