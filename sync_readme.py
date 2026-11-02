@@ -14,7 +14,7 @@ except Exception:
 HERE = os.path.dirname(os.path.abspath(__file__))
 import sys as _s
 _s.path.insert(0, HERE)
-from tools.describe import scope_sentence, recovery_sentence
+from tools.describe import scope_sentence, recovery_sentence, recovery_level
 rep = json.load(open(os.path.join(HERE, "report.json"), encoding="utf-8"))
 prov = json.load(open(os.path.join(HERE, "provenance.json"), encoding="utf-8"))
 
@@ -42,7 +42,17 @@ L.append("|---|---|---|---|---|")
 L.append(f"| T-table（自研） | {t.get('t_ttable'):.2f} | {t.get('effect_ttable_pct')}% | LEAK | 高（已实证密钥恢复） |")
 L.append(f"| 常量时间（自研，修复版） | {t.get('t_constant_time'):.2f} | {t.get('effect_ct_pct')}% | clean | — |")
 for x in libs:
-    L.append(f"| {x['name']} 官方实现 | {x['t']:.2f} | {x['effect_pct']:.2f}% | {x['verdict']} | 待验证（未做密钥恢复） |")
+    _k = "gmssl" if x["name"].lower().startswith("gmssl") else "tongsuo"
+    _r = (rep.get("real_recovery") or {}).get(_k) or {}
+    _lvl = recovery_level(_r)
+    if _lvl == "partial":
+        _runs = "、".join(str(v) for v in (_r.get("runs") or []))
+        _exp = f"部分信息恢复（{_runs} 字节的高 4 bit）"
+    elif _lvl == "none":
+        _exp = "未验证（该方法未收敛）"
+    else:
+        _exp = "未验证"
+    L.append(f"| {x['name']} 官方实现 | {x['t']:.2f} | {x['effect_pct']:.2f}% | {x['verdict']} | {_exp} |")
 if cl.get("gmssl_small"):
     s = cl["gmssl_small"]
     L.append(f"| GmSSL 小表配置 | {s['t']:.2f} | {s['effect_pct']:.2f}% | {'LEAK' if s['t'] > 4.5 else 'clean'} | 待验证 |")
