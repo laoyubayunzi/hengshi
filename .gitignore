@@ -31,3 +31,6 @@ report.smoke.json
 report.smoke.md
 findings.smoke.json
 findings.smoke.md
+
+# Release 附件（不入库）
+dist/
