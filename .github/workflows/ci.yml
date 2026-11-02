@@ -85,13 +85,12 @@ jobs:
         shell: pwsh
         run: |
           python .\make_report.py --smoke
-          Copy-Item report.smoke.json report.json -Force
-          python .\make_findings.py
+          python .\make_findings.py --in report.smoke.json --out findings.smoke.json
 
       - name: 报告结构校验
         shell: pwsh
         run: |
-          python .\tools\check_schema.py
+          python .\tools\check_schema.py --report report.smoke.json --findings findings.smoke.json
           python .\tools\check_docs.py
 
       - name: 上传报告产物
@@ -100,9 +99,9 @@ jobs:
         with:
           name: report-smoke
           path: |
-            report.json
-            report.md
-            findings.json
-            findings.md
+            report.smoke.json
+            report.smoke.md
+            findings.smoke.json
+            findings.smoke.md
             *.obj
           if-no-files-found: warn

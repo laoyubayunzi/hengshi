@@ -29,3 +29,5 @@ __pycache__/
 # smoke 模式产物
 report.smoke.json
 report.smoke.md
+findings.smoke.json
+findings.smoke.md

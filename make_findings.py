@@ -14,8 +14,19 @@ try:
 except Exception:
     pass
 
+ARGV = sys.argv[1:]
+
+
+def _arg(name, default):
+    if name in ARGV:
+        i = ARGV.index(name)
+        if i + 1 < len(ARGV):
+            return ARGV[i + 1]
+    return default
+
+
 HERE = os.path.dirname(os.path.abspath(__file__))
-rep = json.load(open(os.path.join(HERE, "report.json"), encoding="utf-8"))
+rep = json.load(open(_arg("--in", os.path.join(HERE, "report.json")), encoding="utf-8"))
 
 t = rep.get("ttest", {})
 g = rep.get("gmssl", {})
@@ -121,7 +132,7 @@ if sm.get("t") is not None:
         "见 HS-001 的修复实现及其复测结果",
         "同上")
 
-with open(os.path.join(HERE, "findings.json"), "w", encoding="utf-8") as f:
+with open(_arg("--out", os.path.join(HERE, "findings.json")), "w", encoding="utf-8") as f:
     json.dump({"tool": "hengshi", "generated": time.strftime("%Y-%m-%d %H:%M:%S"), "findings": findings},
               f, ensure_ascii=False, indent=2)
 
@@ -172,5 +183,7 @@ L.append("- 覆盖范围为 SM4（含两种编译配置），未含 SM2/SM3。")
 L.append("- 同进程/共享页假设，跨进程攻击需额外处理。")
 L.append("- 未覆盖多核干扰、虚拟化、超线程等真实测评环境噪声。")
 
-open(os.path.join(HERE, "findings.md"), "w", encoding="utf-8").write("\n".join(L))
-print(f"wrote findings.json / findings.md  ({len(findings)} findings)")
+_out_json = _arg("--out", os.path.join(HERE, "findings.json"))
+_md_path = _out_json[:-5] + ".md" if _out_json.endswith(".json") else _out_json + ".md"
+open(_md_path, "w", encoding="utf-8").write("\n".join(L))
+print(f"wrote {os.path.basename(_out_json)} / {os.path.basename(_md_path)}  ({len(findings)} findings)")

@@ -26,6 +26,17 @@ REQUIRED_TTEST = ["t_ttable", "t_constant_time", "verdict_ttable", "verdict_cons
 DETECTION = {"clean", "leak", "inconclusive"}
 EXPLOIT = {"未验证", "部分信息恢复", "完整密钥恢复", "不适用"}
 
+ARGV = sys.argv[1:]
+
+
+def _arg(name, default):
+    if name in ARGV:
+        i = ARGV.index(name)
+        if i + 1 < len(ARGV):
+            return ARGV[i + 1]
+    return default
+
+
 problems = []
 
 
@@ -37,8 +48,8 @@ def need(obj, key, where):
 
 
 def main() -> int:
-    rp = os.path.join(ROOT, "report.json")
-    fp = os.path.join(ROOT, "findings.json")
+    rp = _arg("--report", os.path.join(ROOT, "report.json"))
+    fp = _arg("--findings", os.path.join(ROOT, "findings.json"))
     for p in (rp, fp):
         if not os.path.exists(p):
             problems.append(f"缺少文件 {os.path.basename(p)}（先跑 make_report.py / make_findings.py）")
