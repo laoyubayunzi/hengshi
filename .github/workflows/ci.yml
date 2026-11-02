@@ -19,7 +19,19 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      - name: 环境自检
+        shell: pwsh
+        run: |
+          Write-Output "== runner =="
+          $PSVersionTable | Out-String | Write-Output
+          Write-Output "== git 行尾配置 =="
+          git config --get core.autocrlf
+          Write-Output "== 第三方源码行尾（i/=索引 w/=工作区）=="
+          git ls-files --eol src/thirdparty/ | Write-Output
+          Write-Output "== Python =="
+          python --version
 
       - name: 编译（MSVC）
         shell: pwsh
@@ -56,4 +68,5 @@ jobs:
             report.md
             findings.json
             findings.md
+            *.obj
           if-no-files-found: warn
