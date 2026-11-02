@@ -1,5 +1,9 @@
 # 衡时 · hengshi v1
 
+
+[![ci](https://github.com/laoyubayunzi/hengshi/actions/workflows/ci.yml/badge.svg)](https://github.com/laoyubayunzi/hengshi/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 **面向国密实现的常量时间性检测与密钥泄漏定位平台**
 
 不修改被测源码、无需插桩、无需专用采集硬件；当前版本面向支持 RDTSCP / CLFLUSH 的 x86 平台。
