@@ -44,11 +44,16 @@ static inline void flush_line(const void* p) {
 
 /* 把一段内存里所有缓存行踢掉。len 不需要是 64 的倍数。 */
 static inline void flush_block(const void* p, size_t len) {
-    const char* c = (const char*)p;
-    for (size_t off = 0; off < len; off += 64) {
-        flush_line(c + off);
+    /* 起点向下对齐到 64 字节、终点向上对齐：
+     * 表首地址不保证 64 字节对齐，若按 p+0/64/128... 刷，
+     * 会漏掉表尾所在的最后一条缓存行。 */
+    uintptr_t addr = (uintptr_t)p;
+    uintptr_t begin = addr & ~(uintptr_t)63;
+    uintptr_t last  = (addr + len - 1) & ~(uintptr_t)63;
+    for (uintptr_t a = begin; a <= last; a += 64) {
+        flush_line((const void*)a);
     }
-    _mm_mfence();   /* 等 flush 真正落地 */
+    _mm_mfence();
 }
 
 #endif /* TIMING_H */

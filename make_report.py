@@ -259,7 +259,8 @@ def render_markdown(rep):
         L.append("\n来源（按发行 tag 固定下载）：")
         for x in pv["sources"]:
             L.append(f"- {x['library']} {x['version']}：{x['url']}")
-        L.append(f"\n**三个库只对应 {pv['distinct_implementations']} 份独立实现。** {pv['note']}。")
+        L.append(f"\n**三个库只对应 {pv['distinct_implementations']} 份独立 SM4 实现。** {pv['note']}。"
+                 "（dudect 是对照基准工具，不计入同源结论。）")
         L.append("供应链含义：同一份上游实现的缺陷会同时影响多个下游库，"
                  "所谓「多家实现互相印证」在这种情形下并不成立。\n")
 

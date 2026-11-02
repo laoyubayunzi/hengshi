@@ -68,8 +68,11 @@ def main() -> int:
             if h:
                 hints.append(f"{x['library']}: {h}")
 
-    distinct = len({x["sha256"] for x in prov["sources"]})
-    print(f"\n独立实现数：{distinct} / 源码份数：{len(prov['sources'])}")
+    targets = [x for x in prov["sources"] if x.get("role", "target") == "target"]
+    benches = [x for x in prov["sources"] if x.get("role") == "benchmark"]
+    distinct = len({x["sha256"] for x in targets})
+    print(f"\n被测实现：{distinct} 份独立实现 / {len(targets)} 份源码"
+          + (f"；另有 {len(benches)} 份对照基准工具（不计入同源结论）" if benches else ""))
     if distinct != prov.get("distinct_implementations", distinct):
         print("[FAIL] 独立实现数与 provenance.json 记录不一致")
         failures += 1

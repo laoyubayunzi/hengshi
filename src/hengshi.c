@@ -637,7 +637,8 @@ static int cmd_libs(int n, int reps) {
         }
         const char* verdict = (med > 4.5) ? "LEAK" : "clean";
         const char* stability = "";
-        if (med <= 4.5 && mx > 4.5) stability = " UNSTABLE";
+        /* 双向不稳定：中位在阈值内但最大越阈值，或中位越阈值但最小落在阈值内 */
+        if ((med <= 4.5 && mx > 4.5) || (med > 4.5 && mn <= 4.5)) stability = " UNSTABLE";
         printf("LIB %s t=%.2f min=%.2f max=%.2f effect=%.3f verdict=%s%s\n",
                libs[i].name, med, mn, mx, eff, verdict, stability);
     }
@@ -1089,14 +1090,15 @@ static int cmd_bench(int n) {
     double* b = (double*)malloc(sizeof(double) * (size_t)n);
     if (!a || !b) { printf("oom\n"); return 1; }
 
-    printf("=== 与 dudect 方法的同机对照（同一批样本，两种判据）===\n");
-    printf("    本工具：裁剪 5%%、阈值 4.5　|　dudect 口径：裁剪 1%%、阈值 10\n");
-    printf("    注：dudect 一列为按其公开算法做的本地复现，非上游二进制\n\n");
-    printf("%-18s %10s %10s %10s %10s  %s\n", "实现", "本工具|t|", "dudect|t|", "采集耗时ms", "判定一致", "结论");
+    printf("=== 阈值与裁剪参数敏感性（同一批样本，两套预处理）===\n");
+    printf("    本工具：裁剪 5%%、阈值 4.5、五次取中位\n");
+    printf("    严口径：裁剪 1%%、阈值 10（更接近 dudect 的参数选择，但不是 dudect）\n");
+    printf("    上游 dudect 的对照见 tests/dudect_harness.c\n\n");
+    printf("%-18s %10s %10s %10s %10s  %s\n", "实现", "本工具|t|", "严口径|t|", "采集耗时ms", "判定一致", "结论");
 
     for (int i = 0; i < 4; i++) {
-        double ts_ours[3], ts_dud[3], ms_all[3];
-        for (int rep = 0; rep < 3; rep++) {   /* 三次取中位：单轮会被偶发中断拉偏 */
+        double ts_ours[5], ts_dud[5], ms_all[5];
+        for (int rep = 0; rep < 5; rep++) {   /* 三次取中位：单轮会被偶发中断拉偏 */
             uint64_t t0 = now_cycles();
             /* 必须交错采集：先跑完 A 组再跑 B 组会把"冷/热"顺序效应算成泄漏 */
             for (int j = 0; j < n; j++) {
@@ -1108,13 +1110,10 @@ static int cmd_bench(int n) {
             ts_dud[rep] = fabs(welch_from(a, n, b, n, 0.01));
             ms_all[rep] = (double)(t1 - t0) / 3.0e6;
         }
-        double so[3] = { ts_ours[0], ts_ours[1], ts_ours[2] };
-        double sd[3] = { ts_dud[0], ts_dud[1], ts_dud[2] };
-        double sm[3] = { ms_all[0], ms_all[1], ms_all[2] };
-        qsort(so, 3, sizeof(double), cmp_double);
-        qsort(sd, 3, sizeof(double), cmp_double);
-        qsort(sm, 3, sizeof(double), cmp_double);
-        double t_ours = so[1], t_dud = sd[1], ms = sm[1];
+        qsort(ts_ours, 5, sizeof(double), cmp_double);
+        qsort(ts_dud, 5, sizeof(double), cmp_double);
+        qsort(ms_all, 5, sizeof(double), cmp_double);
+        double t_ours = ts_ours[2], t_dud = ts_dud[2], ms = ms_all[2];
         int v_ours = t_ours > 4.5, v_dud = t_dud > 10.0;
         printf("%-18s %10.1f %10.1f %10.1f %10s  %s\n",
                impls[i].name, t_ours, t_dud, ms,

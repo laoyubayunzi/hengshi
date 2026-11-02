@@ -94,15 +94,31 @@ def build(rep):
               f"- 恢复轮密钥：`{' '.join(atk.get('recovered_round_keys', []))}`",
               f"- 主密钥一致：**{atk.get('master_key_match')}**", ""]
 
+    du = rep.get("dudect_upstream") or []
+    if du:
+        L += ["### A.9 与上游 dudect 的同机对照", "",
+              "> 直接编译上游 dudect（oreparaz/dudect，commit dc269651，MIT）作为基准，",
+              "> 统计全部由它自己完成（102 个检验：1 次未裁剪 + 100 个上尾裁剪百分位 + 1 次二阶），",
+              "> 每次跑三遍取多数。", "",
+              "| 实现 | dudect 结论（三次） | 触发样本 | dudect max \\|t\\| | 耗时 (ms) |",
+              "|---|---|---|---|---|"]
+        for r in du:
+            vd = "、".join(str(v) for v in r.get("verdicts") or [])
+            samp = "、".join(str(v) for v in (r.get("samples") or []))
+            L.append(f"| {r['name']} | {r.get('verdict')}（{vd}） | {samp} | "
+                     f"{(r.get('max_t') or 0):.1f} | {r.get('ms')} |")
+        L += [""]
+
     db = rep.get("dudect_bench") or []
     if db:
-        L += ["### A.9 与 dudect 方法的同机对照", "",
-              "| 实现 | 本工具 \\|t\\| | dudect 口径 \\|t\\| | 采集耗时 (ms) | 一致 | 结论 |",
-              "|---|---|---|---|---|---|"]
+        L += ["### A.10 阈值与裁剪参数敏感性（不是 dudect）", "",
+              "| 实现 | 本工具 \\|t\\| | 严口径 \\|t\\| | 判定一致 |",
+              "|---|---|---|---|"]
         for r in db:
-            L.append(f"| {r['name']} | {r['t_ours']:.1f} | {r['t_dudect']:.1f} | {r['ms']:.0f} | "
-                     f"{'是' if r['agree'] else '否'} | {r['verdict']} |")
-        L += ["", "> dudect 一列按公开算法本地复现（裁剪 1%、阈值 10），非上游二进制。", ""]
+            L.append(f"| {r['name']} | {r['t_ours']:.1f} | {r['t_dudect']:.1f} | "
+                     f"{'是' if r['agree'] else '否'} |")
+        L += ["", "> 同一批样本换两套预处理：本工具（裁剪 5%、阈值 4.5）与更严口径（裁剪 1%、阈值 10）。",
+              "> 只说明结论对参数不敏感，**与 dudect 无关**。", ""]
 
     if cost.get("ratio"):
         L += ["### A.8 修复代价", "",

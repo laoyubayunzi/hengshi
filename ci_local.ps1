@@ -28,6 +28,12 @@ Write-Host "  通过" -ForegroundColor Green
 # 测不出 UnicodeEncodeError 这类问题
 $env:PYTHONIOENCODING = 'cp1252'
 
+Step "2.5/5 dudect harness 冒烟"
+if (-not (Test-Path tests\dudect_harness.exe)) { throw "harness 未生成" }
+$dh = & .\tests\dudect_harness.exe ours_tt 40000 10000
+if (-not ($dh -match 'DUDECT impl=')) { throw "harness 输出异常" }
+Write-Host "  通过" -ForegroundColor Green
+
 Step "3/5 第三方源码溯源校验"
 & $py .\tools\check_provenance.py
 if ($LASTEXITCODE -ne 0) { throw "溯源校验失败" }

@@ -10,7 +10,8 @@
       "file": "gmssl_sm4.c",
       "bytes": 29011,
       "lines": 918,
-      "sha256": "1d7374c8c8fc4ca9fc7dcae60ffcd3d067378c316db1fff662634e1fb189e079"
+      "sha256": "1d7374c8c8fc4ca9fc7dcae60ffcd3d067378c316db1fff662634e1fb189e079",
+      "role": "target"
     },
     {
       "library": "Tongsuo",
@@ -21,7 +22,8 @@
       "file": "tongsuo_sm4.c",
       "bytes": 19806,
       "lines": 380,
-      "sha256": "ada930751c8b976522d72cd2054b85d59222a4aa479d6fcb042b409f70d011af"
+      "sha256": "ada930751c8b976522d72cd2054b85d59222a4aa479d6fcb042b409f70d011af",
+      "role": "target"
     },
     {
       "library": "BabaSSL",
@@ -32,7 +34,8 @@
       "file": "babassl_sm4.c",
       "bytes": 19806,
       "lines": 380,
-      "sha256": "ada930751c8b976522d72cd2054b85d59222a4aa479d6fcb042b409f70d011af"
+      "sha256": "ada930751c8b976522d72cd2054b85d59222a4aa479d6fcb042b409f70d011af",
+      "role": "target"
     },
     {
       "library": "dudect",
@@ -44,9 +47,11 @@
       "sha256": "3fb3b2bd7f9e17ae34b7c92518c1311c67342c56facc80da925d85f121b649da",
       "url": "https://github.com/oreparaz/dudect/blob/dc269651fb2567e46755cfb2a13d3875592968b5/src/dudect.h",
       "usage": "同机对照：直接编译上游 dudect 作为基准，不做算法复现",
-      "lines": 487
+      "lines": 487,
+      "role": "benchmark"
     }
   ],
   "note": "三份源码均按发行 tag 固定下载；Tongsuo 8.5.0 与 BabaSSL 8.5.0 指向同一 commit 且文件哈希相同。",
-  "distinct_implementations": 3
+  "distinct_implementations": 2,
+  "role_note": "target = 被测实现；benchmark = 对照基准工具。供应链同源结论只统计 target。"
 }

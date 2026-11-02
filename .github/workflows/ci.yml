@@ -71,6 +71,15 @@ jobs:
           & .\tests\test_sm4.exe
           if ($LASTEXITCODE -ne 0) { throw "C 单元测试失败" }
 
+      - name: dudect 对照 harness 冒烟
+        shell: pwsh
+        run: |
+          # build.ps1 已生成 tests\dudect_harness.exe；这里确认它能跑
+          if (-not (Test-Path tests\dudect_harness.exe)) { throw "harness 未生成" }
+          $out = & .\tests\dudect_harness.exe ours_tt 40000 10000
+          $out | Select-Object -Last 2 | Write-Output
+          if (-not ($out -match 'DUDECT impl=')) { throw "harness 输出异常" }
+
       - name: 单元测试（Python 解析器，确定性）
         shell: pwsh
         run: |

@@ -50,3 +50,17 @@ cmd /c $cmd
 if ($LASTEXITCODE -ne 0) { throw "build failed ($LASTEXITCODE)" }
 
 Get-Item (Join-Path $here 'hengshi.exe') | Select-Object FullName, Length
+
+# ---- dudect 对照 harness（tests\dudect_harness.exe）----
+# 必须一起构建：make_report.py 会调用它做同机对照。
+# 之前它只存在于本机工作目录（被 .gitignore 忽略），导致新 clone 无法跑完整报告。
+$hcmd = "call `"$vcvars`" >nul 2>&1 && cd /d `"$here`" && " +
+        "cl $common /I src\thirdparty\shim /c src\sm4.c /Fo:hs_sm4.obj && " +
+        "cl $common /I src\thirdparty\shim /c src\thirdparty\gmssl_sm4.c /Fo:hs_gmssl.obj && " +
+        "cl $common /I src\thirdparty\shim /I src\thirdparty\tongsuo /Dstatic= /DSM4_S=TS_SM4_S /c src\thirdparty\tongsuo_sm4.c /Fo:hs_tongsuo.obj && " +
+        "cl $common /I src\thirdparty\shim /c tests\dudect_harness.c /Fo:hs_dudect.obj && " +
+        "link /nologo hs_dudect.obj hs_sm4.obj hs_gmssl.obj hs_tongsuo.obj bcrypt.lib /OUT:tests\dudect_harness.exe"
+
+cmd /c $hcmd
+if ($LASTEXITCODE -ne 0) { throw "dudect harness build failed ($LASTEXITCODE)" }
+Get-Item (Join-Path $here 'tests\dudect_harness.exe') | Select-Object FullName, Length
