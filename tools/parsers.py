@@ -93,7 +93,7 @@ def parse_attack(out: str):
 
 def parse_real_recovery(out: str):
     """解析真实库部分恢复输出。"""
-    m = re.search(r"结果：(\d+)/(\d+) 个字节的高 4 bit 与真实值一致", out)
+    m = re.search(r"结果：(\d+)/(\d+) 个字节判定成功", out)
     pairs = re.findall(r"\s+b(\d)\s+0x([0-9a-f])\s+最高组=0x([0-9a-f])\s+\((\d+)/", out)
     return {
         "matched": int(m.group(1)) if m else None,

@@ -946,7 +946,7 @@ static int cmd_attack_real(const char* lib, int traces) {
 
     /* 统计结果 */
     const uint32_t true_rk = true_rk0;
-    int total_hit_lines_correct = 0, total_guesses = 0;
+    int total_hit_lines_correct = 0, total_guesses = 0, total_ambig = 0;
     printf("\n  %-6s %-10s %-28s %-10s %s\n", "字节", "真实高4位", "得分最高的 16 个候选(高4位)", "正确组得分", "其余组均值");
     for (int j = 0; j < 4; j++) {
         uint8_t true_byte = (uint8_t)(true_rk >> (24 - 8 * j));
@@ -971,13 +971,21 @@ static int cmd_attack_real(const char* lib, int traces) {
                j, true_hi, hi_best, best, traces,
                (double)group_score[true_hi], (double)sum_other / 15.0);
 
-        if (hi_best == true_hi) total_hit_lines_correct++;
+        /* 边际判定：最高组与次高组差距太小时，不猜——标为歧义。
+         * 这是"宁可说不知道，也不给错误答案"的工程选择。 */
+        double margin = (double)(best - second) / (double)traces;
+        int ambiguous = (margin < 0.01);
+        if (ambiguous) total_ambig++;
+        else if (hi_best == true_hi) total_hit_lines_correct++;
         total_guesses++;
+        if (ambiguous) printf("            ↑ 边际仅 %.2f%%，标为歧义（不给出猜测）\n", margin * 100.0);
     }
 
     printf("\n  说明：同一缓存行内的 16 个候选得分完全相同（行粒度不可区分），\n");
     printf("        因此每个字节只能确定高 4 bit；低 4 bit 需要更细的观测通道。\n");
-    printf("  结果：%d/%d 个字节的高 4 bit 与真实值一致。\n", total_hit_lines_correct, total_guesses);
+    printf("  结果：%d/%d 个字节判定成功", total_hit_lines_correct, total_guesses);
+    if (total_ambig) printf("，%d 个歧义（边际不足 1%%，不给出猜测）", total_ambig);
+    printf("。\n");
 
     free(hit); free(pts); free(order);
     /* 退出码只表示实验是否正常跑完；恢复成功与否写在输出里。
@@ -985,7 +993,32 @@ static int cmd_attack_real(const char* lib, int traces) {
     return 0;
 }
 
+
+/* ------------------------------------------------------------------ cost：修复的代价
+ *
+ * 只回答一个问题：把 T-table 换成常量时间实现，慢了多少钱？
+ * 用同一套测量（每次 flush 后测单次加密周期）对比两种实现的均值。
+ */
+static int cmd_cost(int n) {
+    static const uint8_t K[16] = {0xA1,0xB2,0xC3,0xD4,0xE5,0xF6,0x07,0x18,0x29,0x3A,0x4B,0x5C,0x6D,0x7E,0x8F,0x90};
+    sm4_key k; sm4_set_enc_key(K, &k);
+    sm4_tables_alloc(4);
+
+    uint64_t sum_tt = 0, sum_ct = 0;
+    for (int i = 0; i < n; i++) sum_tt += measure_once(sm4_tt, &k, i & 1);
+    for (int i = 0; i < n; i++) sum_ct += measure_once(sm4_ct, &k, i & 1);
+
+    double m_tt = (double)sum_tt / n, m_ct = (double)sum_ct / n;
+    printf("=== 修复代价：T-table → 常量时间 ===\n");
+    printf("  T-table     平均 %8.1f 周期/次\n", m_tt);
+    printf("  常量时间版   平均 %8.1f 周期/次\n", m_ct);
+    printf("  倍数 %.2fx（每类 %d 次，每次测量前 flush 全部表）\n", m_ct / m_tt, n);
+    printf("  说明：这是纯软件常量时间化的代价；位切片实现通常比全表扫描便宜，但仍是数倍量级。\n");
+    return 0;
+}
+
 /* ------------------------------------------------------------------ main */
+
 
 static void usage(void) {
     printf("hengshi - 面向国密实现的常量时间性检测与密钥泄漏定位\n\n");
@@ -998,6 +1031,7 @@ static void usage(void) {
     printf("  hengshi compare [n]                     同库两种表布局对比（默认 n=40000）\n");
     printf("  hengshi libs [n] [reps]                 多库横向对比（GmSSL / Tongsuo）\n");
     printf("  hengshi sweep [reps] [n]                假阳性评估（默认 10 轮 / 20000 样本）\n");
+    printf("  hengshi cost [n]                        修复代价：常量时间化的性能开销\n");
     printf("  hengshi attack-real [lib] [traces]      真实库部分密钥恢复（lib=gmssl|tongsuo）\n");
     printf("  hengshi heat [stride] [file.csv]        导出单条 trace 的缓存行命中图\n");
     printf("  hengshi all                             依次跑 verify + ttest + converge + attack\n");
@@ -1051,6 +1085,11 @@ int main(int argc, char** argv) {
         int n = (argc > 2) ? atoi(argv[2]) : 40000;
         if (n < 2000) n = 2000;
         return cmd_compare(n);
+    }
+    if (!strcmp(cmd, "cost")) {
+        int n2 = (argc > 2) ? atoi(argv[2]) : 20000;
+        if (n2 < 1000) n2 = 1000;
+        return cmd_cost(n2);
     }
     if (!strcmp(cmd, "attack-real")) {
         const char* lib = (argc > 2) ? argv[2] : "gmssl";

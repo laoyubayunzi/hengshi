@@ -133,8 +133,12 @@ L.append(f"本次共记录 {len(findings)} 条发现：**{leak_n} 个实现经�
          f"另有 {obs_n} 条为源码同源性的供应链观察（BabaSSL 与 Tongsuo 同源，未单独实测）。\n")
 L.append("证据分层说明：")
 L.append("- **统计证据**（Welch t 值 + 效应量 + √n 收敛）覆盖上述 4 个实测实现与 3 个干净对照实现；")
-L.append("- **密码学证据**（密钥恢复）目前仅对**自研实现的行对齐布局**完成；"
-         "未对 GmSSL / Tongsuo 实施密钥恢复，对其结论仅限统计判定。\n")
+rr_all = rep.get("real_recovery") or {}
+g_rr = rr_all.get("gmssl") or {}
+t_rr = rr_all.get("tongsuo") or {}
+L.append("- **密码学证据分两级**：**完整 128 bit 主密钥恢复**仅在自研实现的行对齐布局上完成；"
+         f"真实库上可做到**部分恢复**（GmSSL 三次重复分别 {g_rr.get('runs')}/{g_rr.get('total')} 字节的高 4 bit，"
+         f"Tongsuo {t_rr.get('matched')}/{t_rr.get('total')} 未收敛），低半字节在行粒度下不可辨识。\n")
 L.append("**两级判定，两个字段，不混为一谈**：")
 L.append("- `detection`（检测结论）：`clean` / `leak` / `inconclusive` —— 是否存在数据相关的时间差异；")
 L.append("- `exploit`（可利用性）：`未验证` / `部分信息恢复` / `完整密钥恢复` —— 该差异被利用到什么程度。")

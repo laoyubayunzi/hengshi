@@ -106,12 +106,20 @@ check("attack 不一致能识别", parse_attack(atk_bad)["master_key_match"] is 
 real_out = """  b0     0xf        最高组=0xf  (799/800)        799.0      731.8
   b1     0x2        最高组=0x2  (799/800)        799.0      733.9
 
-  结果：4/4 个字节的高 4 bit 与真实值一致。
+  结果：4/4 个字节判定成功。
 """
 r = parse_real_recovery(real_out)
 check("real 计数", r["matched"] == 4 and r["total"] == 4)
 check("real 逐字节两项", len(r["per_byte"]) == 2)
 check("real 逐字节取值", r["per_byte"][0]["true_hi"] == "f" and r["per_byte"][1]["byte"] == 1)
+
+# 带歧义的结果也要能解析
+real_amb = """  b0     0xf        最高组=0xf  (1200/1200)       1200.0     1045.4
+
+  结果：3/4 个字节判定成功，1 个歧义（边际不足 1%，不给出猜测）。
+"""
+r2 = parse_real_recovery(real_amb)
+check("real 歧义结果的计数", r2["matched"] == 3 and r2["total"] == 4)
 
 print()
 if fails:

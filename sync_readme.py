@@ -56,14 +56,19 @@ if len(conv) >= 2:
     ratio_n = b["n"] / a["n"]
     L.append(f"\n样本放大 {ratio_n:.0f} 倍，\\|t\\| 放大 {b['t_ttable'] / a['t_ttable']:.2f} 倍（理论 √{ratio_n:.0f} = {ratio_n ** 0.5:.2f}）。\n")
 
-L.append("**4. 密钥真的能被恢复**（仅在自研实现的行对齐布局上完成）\n")
+L.append("**4. 密钥真的能被恢复**（完整 128 bit 在主自研行对齐布局；真实库仅部分）\n")
 L.append("```")
 L.append(f"真实轮密钥  {' '.join(atk.get('true_round_keys', []))}")
 L.append(f"恢复轮密钥  {' '.join(atk.get('recovered_round_keys', []))}")
 L.append(f"反推主密钥  {atk.get('recovered_master_key', '—')}")
 L.append(f"真实主密钥  {atk.get('true_master_key', '—')}    {'完全一致' if atk.get('master_key_match') else '不一致'}")
 L.append("```")
-L.append("\n对 GmSSL / Tongsuo **未实施密钥恢复**，其结论仅限统计判定。\n")
+rr = rep.get("real_recovery") or {}
+_g = rr.get("gmssl") or {}
+_t = rr.get("tongsuo") or {}
+L.append(f"\n**证据范围（分两级）**：完整 128 bit 恢复仅在本项目自研的行对齐布局上完成；"
+         f"真实库做到部分恢复——GmSSL 本轮 {_g.get('matched')}/{_g.get('total')} 个字节的高 4 bit，"
+         f"Tongsuo {_t.get('matched')}/{_t.get('total')} 未收敛。\n")
 
 L.append("**5. 不会乱报**\n")
 if fp.get("variants"):
