@@ -642,7 +642,7 @@ static int cmd_libs(int n, int reps) {
         printf("LIB %s t=%.2f min=%.2f max=%.2f effect=%.3f verdict=%s%s\n",
                libs[i].name, med, mn, mx, eff, verdict, stability);
     }
-    printf("# UNSTABLE = 中位在阈值内但个别轮次越阈值，判定对机器状态敏感\n");
+    printf("# UNSTABLE = 跨轮范围穿过阈值（max 越阈值或 min 落回阈值内），判定对机器状态敏感\n");
     return 0;
 }
 /* ------------------------------------------------------------------ 同库两种配置对比
@@ -1038,9 +1038,9 @@ static int cmd_cost(int n) {
  * dudect（Reparaz et al. 2017）与本工具的差异只在"统计预处理"：
  *   dudect：裁剪两端各 1%，阈值 |t| > 10，看累积 t
  *   本工具：裁剪两端各 5%，阈值 |t| > 4.5，重复 3 次取中位
- * 这里对**同一批样本**分别套两种判据，给出同机对照表。
+ * 这里对**同一批样本**分别套两套预处理，用来观察结论对参数是否敏感。这是参数敏感性实验，不是 dudect；上游 dudect 的对照见 tests/dudect_harness.c。
  *
- * 注意：这是按 dudect 公开算法做的本地复现，不是编译上游二进制。
+ * 注意：本实验只改预处理参数，与 dudect 的 102 个检验流程无关。
  */
 static int cmp_double(const void* a, const void* b) {
     double x = *(const double*)a, y = *(const double*)b;

@@ -134,13 +134,20 @@ def collect():
         rec["sha256_actual"] = actual
         rec["hash_match"] = (actual == x["sha256"])
         prov.append(rec)
-    distinct = len({x["sha256"] for x in prov})
+    # 供应链同源结论只统计被测实现（role=target）；对照基准工具不参与
+    targets = [x for x in prov if x.get("role", "target") == "target"]
+    benches = [x for x in prov if x.get("role") == "benchmark"]
+    distinct = len({x["sha256"] for x in targets})
+    same_source = distinct < len(targets)
     rep["provenance"] = {
         "sources": prov,
+        "roles": {"target": [x["library"] for x in targets],
+                  "benchmark": [x["library"] for x in benches]},
         "distinct_implementations": distinct,
+        "target_sources": len(targets),
         "all_hash_verified": all(x["hash_match"] for x in prov),
         "note": ("Tongsuo 与 BabaSSL 的 SM4 源码字节级相同，且两个发行 tag 指向同一 commit："
-                 "同一份上游实现被两个下游项目共用" if distinct < len(prov) else "各库实现互不相同"),
+                 "同一份上游实现被两个下游项目共用" if same_source else "各库实现互不相同"),
     }
 
     out, _ = run("sweep", SWEEP_REPS, SWEEP_N)
@@ -259,8 +266,11 @@ def render_markdown(rep):
         L.append("\n来源（按发行 tag 固定下载）：")
         for x in pv["sources"]:
             L.append(f"- {x['library']} {x['version']}：{x['url']}")
-        L.append(f"\n**三个库只对应 {pv['distinct_implementations']} 份独立 SM4 实现。** {pv['note']}。"
-                 "（dudect 是对照基准工具，不计入同源结论。）")
+        L.append(f"\n**{pv.get('target_sources')} 份被测源码只对应 "
+                 f"{pv['distinct_implementations']} 份独立 SM4 实现。** {pv['note']}。")
+        if (pv.get("roles") or {}).get("benchmark"):
+            L.append(f"另有 {len(pv['roles']['benchmark'])} 份对照基准工具"
+                     f"（{'、'.join(pv['roles']['benchmark'])}），不参与同源结论。")
         L.append("供应链含义：同一份上游实现的缺陷会同时影响多个下游库，"
                  "所谓「多家实现互相印证」在这种情形下并不成立。\n")
 

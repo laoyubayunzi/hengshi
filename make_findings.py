@@ -67,14 +67,26 @@ add("SM4 T-table 实现存在缓存时序泄漏，可导致主密钥恢复",
 
 pv = rep.get("provenance") or {}
 if pv.get("sources") and pv.get("distinct_implementations", 99) < len(pv["sources"]):
-    add("多个国产库共用同一份 SM4 上游实现（供应链集中度风险）",
-        "；".join(x["library"] for x in pv["sources"]),
-        None, None,
-        [f"{x['library']}: {x['file']}  SHA-256 {x['sha256'][:32]}…" for x in pv["sources"]],
-        "同一上游实现的时序泄漏会同时存在于多个下游库；\"多家实现互相印证\"的假设不成立，选型时不能靠库数量判断安全性",
-        "选型时核验实现来源（哈希/上游血缘），而非只看厂商数量；对共用上游统一修补",
-        "两者源码完全相同，因此预期行为一致；BabaSSL 未独立运行验证，本报告不对其单独下结论",
-        "供应链管理实践的一般要求（不在本报告中指定具体标准条款号）", kind="observation", detection="inconclusive", exploit="不适用")
+    _pv_src = (rep.get("provenance") or {}).get("sources") or []
+_targets = [x for x in _pv_src if x.get("role", "target") == "target"]
+_target_names = "、".join(x["library"] for x in _targets) or "GmSSL、Tongsuo、BabaSSL"
+_same = [x for x in _targets if "Tongsuo" in x["library"] or "BabaSSL" in x["library"]]
+if len(_same) >= 2:
+    _evidence = [f"{_same[0]['library']} {_same[0]['version']} 与 "
+                 f"{_same[1]['library']} {_same[1]['version']} 的 SM4 源码 SHA-256 完全相同，"
+                 f"且发行 tag 指向同一 commit"]
+else:
+    _evidence = ["被测库之间存在相同的源码哈希"]
+add("多个国产库共用同一份 SM4 上游实现（供应链集中度风险）",
+    f"{_target_names}",
+    None, None,
+    _evidence,
+    "同一份上游实现的缺陷会同时影响多个下游库；此时「多家实现互相印证」不成立，"
+    "评估时应按代码来源去重，而不是按库名计数",
+    "供应链层面：建立依赖清单并按源码哈希去重；对共用上游的库，一次修复需要多下游同步",
+    "本工具的溯源校验（tools/check_provenance.py）按角色与哈希分别报告，可用于持续核对",
+    "供应链管理实践的一般要求（不在本报告中指定具体标准条款号）",
+    kind="observation", detection="inconclusive", exploit="不适用")
 
 # 自然布局的边界结论（负结果，但含部分信息）
 add("自然布局（16 项/缓存行）下只能得到表索引高 4 bit，无法稳定完成完整主密钥恢复",

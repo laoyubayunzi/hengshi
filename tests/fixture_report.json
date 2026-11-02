@@ -5,41 +5,50 @@
   "sm4_vector": "OK",
   "ttest": {
     "n_per_class": 40000,
-    "t_ttable": 59.78,
-    "t_constant_time": 0.87,
-    "effect_ttable_pct": 6.64,
-    "effect_ct_pct": 0.01,
+    "t_ttable": 78.62,
+    "t_constant_time": 0.96,
+    "effect_ttable_pct": 6.92,
+    "effect_ct_pct": 0.0,
     "verdict_ttable": "LEAK",
     "verdict_constant_time": "clean"
   },
   "libs": [
     {
       "name": "GmSSL",
-      "t": 53.44,
-      "effect_pct": 5.703,
-      "verdict": "LEAK"
+      "t": 68.4,
+      "min_t": 60.69,
+      "max_t": 69.5,
+      "effect_pct": 5.37,
+      "verdict": "LEAK",
+      "unstable": false
     },
     {
       "name": "Tongsuo-obs",
-      "t": 56.66,
-      "effect_pct": 6.133,
-      "verdict": "LEAK"
+      "t": 56.88,
+      "min_t": 55.63,
+      "max_t": 60.75,
+      "effect_pct": 4.863,
+      "verdict": "LEAK",
+      "unstable": false
     },
     {
       "name": "Tongsuo-pri",
-      "t": 0.96,
-      "effect_pct": 0.016,
-      "verdict": "clean"
+      "t": 2.49,
+      "min_t": 0.87,
+      "max_t": 4.21,
+      "effect_pct": 0.017,
+      "verdict": "clean",
+      "unstable": false
     }
   ],
   "compare_layouts": {
     "gmssl_ttable": {
-      "t": 54.74,
-      "effect_pct": 5.86
+      "t": 61.21,
+      "effect_pct": 5.083
     },
     "gmssl_small": {
-      "t": 58.23,
-      "effect_pct": 6.614
+      "t": 46.17,
+      "effect_pct": 5.096
     }
   },
   "provenance": {
@@ -54,6 +63,7 @@
         "bytes": 29011,
         "lines": 918,
         "sha256": "1d7374c8c8fc4ca9fc7dcae60ffcd3d067378c316db1fff662634e1fb189e079",
+        "role": "target",
         "sha256_actual": "1d7374c8c8fc4ca9fc7dcae60ffcd3d067378c316db1fff662634e1fb189e079",
         "hash_match": true
       },
@@ -67,6 +77,7 @@
         "bytes": 19806,
         "lines": 380,
         "sha256": "ada930751c8b976522d72cd2054b85d59222a4aa479d6fcb042b409f70d011af",
+        "role": "target",
         "sha256_actual": "ada930751c8b976522d72cd2054b85d59222a4aa479d6fcb042b409f70d011af",
         "hash_match": true
       },
@@ -80,11 +91,38 @@
         "bytes": 19806,
         "lines": 380,
         "sha256": "ada930751c8b976522d72cd2054b85d59222a4aa479d6fcb042b409f70d011af",
+        "role": "target",
         "sha256_actual": "ada930751c8b976522d72cd2054b85d59222a4aa479d6fcb042b409f70d011af",
+        "hash_match": true
+      },
+      {
+        "library": "dudect",
+        "version": "commit dc269651",
+        "commit": "dc269651fb2567e46755cfb2a13d3875592968b5",
+        "license": "MIT",
+        "file": "dudect.h",
+        "bytes": 15227,
+        "sha256": "3fb3b2bd7f9e17ae34b7c92518c1311c67342c56facc80da925d85f121b649da",
+        "url": "https://github.com/oreparaz/dudect/blob/dc269651fb2567e46755cfb2a13d3875592968b5/src/dudect.h",
+        "usage": "同机对照：直接编译上游 dudect 作为基准，不做算法复现",
+        "lines": 487,
+        "role": "benchmark",
+        "sha256_actual": "3fb3b2bd7f9e17ae34b7c92518c1311c67342c56facc80da925d85f121b649da",
         "hash_match": true
       }
     ],
+    "roles": {
+      "target": [
+        "GmSSL",
+        "Tongsuo",
+        "BabaSSL"
+      ],
+      "benchmark": [
+        "dudect"
+      ]
+    },
     "distinct_implementations": 2,
+    "target_sources": 3,
     "all_hash_verified": true,
     "note": "Tongsuo 与 BabaSSL 的 SM4 源码字节级相同，且两个发行 tag 指向同一 commit：同一份上游实现被两个下游项目共用"
   },
@@ -94,99 +132,115 @@
         "name": "our T-table",
         "over": 10,
         "reps": 10,
-        "max_t": 43.4,
-        "median_t": 40.8,
-        "correct": true
+        "max_t": 69.3,
+        "median_t": 63.3,
+        "verdict": "OK",
+        "correct": true,
+        "blind": false
       },
       {
         "name": "GmSSL T-table",
         "over": 10,
         "reps": 10,
-        "max_t": 43.3,
-        "median_t": 36.5,
-        "correct": true
+        "max_t": 42.7,
+        "median_t": 40.5,
+        "verdict": "OK",
+        "correct": true,
+        "blind": false
       },
       {
         "name": "GmSSL small-table",
         "over": 10,
         "reps": 10,
-        "max_t": 56.0,
-        "median_t": 47.3,
-        "correct": true
+        "max_t": 29.3,
+        "median_t": 19.7,
+        "verdict": "OK",
+        "correct": true,
+        "blind": false
       },
       {
-        "name": "Tongsuo T-table",
-        "over": 1,
+        "name": "Tongsuo(pristine)",
+        "over": 0,
         "reps": 10,
-        "max_t": 5.2,
-        "median_t": 1.0,
-        "correct": false
+        "max_t": 3.2,
+        "median_t": 0.7,
+        "verdict": "NOT-DETECTED(blind)",
+        "correct": false,
+        "blind": true
       },
       {
         "name": "our const-time",
         "over": 0,
         "reps": 10,
-        "max_t": 1.5,
+        "max_t": 1.8,
         "median_t": 0.6,
-        "correct": true
+        "verdict": "OK",
+        "correct": true,
+        "blind": false
       },
       {
         "name": "our const-time rev",
         "over": 0,
         "reps": 10,
-        "max_t": 3.9,
-        "median_t": 1.5,
-        "correct": true
+        "max_t": 1.8,
+        "median_t": 0.4,
+        "verdict": "OK",
+        "correct": true,
+        "blind": false
       },
       {
         "name": "null baseline",
         "over": 0,
         "reps": 10,
-        "max_t": 2.3,
+        "max_t": 2.8,
         "median_t": 1.1,
-        "correct": true
+        "verdict": "OK",
+        "correct": true,
+        "blind": false
       }
     ],
+    "sensitivity_pct": 100.0,
+    "false_positive_pct": 0.0,
     "all_correct": false
   },
   "convergence": [
     {
       "n": 2000,
-      "t_ttable": 10.52,
-      "t_ct": 0.24
+      "t_ttable": 19.05,
+      "t_ct": 1.12
     },
     {
       "n": 5000,
-      "t_ttable": 16.58,
-      "t_ct": 0.96
+      "t_ttable": 30.27,
+      "t_ct": 1.32
     },
     {
       "n": 10000,
-      "t_ttable": 26.28,
-      "t_ct": 1.22
+      "t_ttable": 37.72,
+      "t_ct": 0.74
     },
     {
       "n": 20000,
-      "t_ttable": 33.95,
-      "t_ct": 1.31
+      "t_ttable": 50.85,
+      "t_ct": 0.38
     },
     {
       "n": 40000,
-      "t_ttable": 48.72,
-      "t_ct": 1.23
+      "t_ttable": 73.58,
+      "t_ct": 1.83
     },
     {
       "n": 80000,
-      "t_ttable": 70.72,
-      "t_ct": 1.08
+      "t_ttable": 96.82,
+      "t_ct": 0.29
     }
   ],
   "convergence_growth": 6.72,
   "convergence_n_ratio": 40.0,
   "cost": {
-    "cycles_ttable": 6908.0,
-    "cycles_ct": 26033.8,
-    "ratio": 3.77
+    "cycles_ttable": 5750.3,
+    "cycles_ct": 20601.9,
+    "ratio": 3.58
   },
   "real_recovery": {
     "gmssl": {
@@ -202,7 +256,7 @@
           "byte": 0,
           "true_hi": "f",
           "best_hi": "f",
-          "score": 1199
+          "score": 1200
         },
         {
           "byte": 1,
@@ -214,13 +268,13 @@
           "byte": 2,
           "true_hi": "8",
           "best_hi": "8",
-          "score": 1132
+          "score": 1200
         },
         {
           "byte": 3,
           "true_hi": "f",
           "best_hi": "f",
-          "score": 1131
+          "score": 1200
         }
       ]
     },
@@ -236,26 +290,26 @@
         {
           "byte": 0,
           "true_hi": "f",
-          "best_hi": "1",
-          "score": 1010
+          "best_hi": "e",
+          "score": 1151
         },
         {
           "byte": 1,
           "true_hi": "2",
-          "best_hi": "c",
-          "score": 983
+          "best_hi": "6",
+          "score": 1149
         },
         {
           "byte": 2,
           "true_hi": "8",
-          "best_hi": "0",
-          "score": 994
+          "best_hi": "d",
+          "score": 1156
         },
         {
           "byte": 3,
           "true_hi": "f",
-          "best_hi": "c",
-          "score": 1002
+          "best_hi": "3",
+          "score": 1158
         }
       ]
     }
@@ -291,5 +345,71 @@
       "90c06080"
     ]
   },
-  "_fixture_note": "CI smoke 模式使用的固定夹具；由一次完整实验快照而来，不代表 CI 现场实测"
+  "_fixture_note": "CI smoke 模式使用的固定夹具；由一次完整实验快照而来，不代表 CI 现场实测",
+  "dudect_upstream": [
+    {
+      "name": "ours T-table",
+      "verdicts": [
+        "LEAK",
+        "LEAK",
+        "LEAK"
+      ],
+      "verdict": "LEAK",
+      "samples": [
+        60000,
+        40000,
+        40000
+      ],
+      "max_t": 32.27,
+      "ms": 250
+    },
+    {
+      "name": "ours const-time",
+      "verdicts": [
+        "clean",
+        "clean",
+        "clean"
+      ],
+      "verdict": "clean",
+      "samples": [
+        120000,
+        120000,
+        120000
+      ],
+      "max_t": 2.28,
+      "ms": 1209
+    },
+    {
+      "name": "GmSSL",
+      "verdicts": [
+        "LEAK",
+        "clean",
+        "LEAK"
+      ],
+      "verdict": "LEAK",
+      "samples": [
+        80000,
+        120000,
+        60000
+      ],
+      "max_t": 14.72,
+      "ms": 434
+    },
+    {
+      "name": "Tongsuo-obs",
+      "verdicts": [
+        "LEAK",
+        "LEAK",
+        "LEAK"
+      ],
+      "verdict": "LEAK",
+      "samples": [
+        60000,
+        60000,
+        60000
+      ],
+      "max_t": 34.46,
+      "ms": 282
+    }
+  ]
 }

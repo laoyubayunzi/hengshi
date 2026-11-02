@@ -47,6 +47,7 @@ static inline void flush_block(const void* p, size_t len) {
     /* 起点向下对齐到 64 字节、终点向上对齐：
      * 表首地址不保证 64 字节对齐，若按 p+0/64/128... 刷，
      * 会漏掉表尾所在的最后一条缓存行。 */
+    if (len == 0) return;          /* 防御性：避免 len-1 下溢 */
     uintptr_t addr = (uintptr_t)p;
     uintptr_t begin = addr & ~(uintptr_t)63;
     uintptr_t last  = (addr + len - 1) & ~(uintptr_t)63;

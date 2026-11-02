@@ -68,6 +68,32 @@ def main() -> int:
     if rep.get("sm4_vector") != "OK":
         problems.append(f"SM4 标准向量未通过：{rep.get('sm4_vector')}")
 
+    # 溯源角色过滤：独立实现数只能统计 target，基准工具必须单列
+    pv = rep.get("provenance") or {}
+    roles = pv.get("roles") or {}
+    tgts = roles.get("target") or []
+    src = pv.get("sources") or []
+    if not tgts:
+        problems.append("provenance.roles.target 缺失（无法确认同源结论只统计被测实现）")
+    if not roles.get("benchmark"):
+        problems.append("provenance.roles.benchmark 缺失（dudect 应作为基准工具单列）")
+    if tgts:
+        hashes_target = {x["sha256"] for x in src if x.get("role", "target") == "target"}
+        hashes_all = {x["sha256"] for x in src}
+        if pv.get("distinct_implementations") != len(hashes_target):
+            problems.append(f"distinct_implementations={pv.get('distinct_implementations')} "
+                            f"与 target 去重数 {len(hashes_target)} 不一致")
+        elif pv.get("distinct_implementations") == len(hashes_all) and len(hashes_all) != len(hashes_target):
+            problems.append("独立实现数疑似把基准工具也算了进去（应只统计 target）")
+        # 受影响资产不得包含基准工具
+        fnd_tmp = None
+        if os.path.exists(fp):
+            fnd_tmp = json.load(open(fp, encoding="utf-8")).get("findings") or []
+        for f in (fnd_tmp or []):
+            if f.get("kind") == "observation" and "供应链" in f.get("title", ""):
+                if "dudect" in (f.get("asset") or ""):
+                    problems.append(f"{f.get('id')}: 供应链条目的受影响资产里出现 dudect（基准工具不应计入）")
+
     # 收敛表结构
     conv = rep.get("convergence") or []
     if len(conv) < 3:
