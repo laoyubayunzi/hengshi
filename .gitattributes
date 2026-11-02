@@ -3,3 +3,7 @@
 *.ps1 text eol=crlf
 *.exe binary
 *.png binary
+
+# 第三方源码必须逐字节可比：禁止任何行尾转换（否则哈希校验会在别处失败）
+src/thirdparty/** -text
+tests/fixture_report.json -text
