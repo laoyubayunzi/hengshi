@@ -1,4 +1,4 @@
-# 衡时 v1.0.0
+# 衡时 v1.0.1
 
 面向 **SM4 软件实现** 的常量时间检测与泄漏验证原型。
 不修改被测源码、无需插桩、无需专用采集硬件；面向支持 RDTSCP / CLFLUSH 的 x86 平台。
@@ -27,11 +27,11 @@
 | 文件 | 说明 |
 |---|---|
 | `hengshi.exe` | 主程序（`/MT` 静态链接，仅依赖 KERNEL32.dll） |
-| `hengshi-1.0.0-doc.pdf` | 作品文档（9 章、7 表、3 图） |
+| `hengshi-1.0.1-doc.pdf` | 作品文档（9 章、7 表、3 图） |
 | `report.md` / `report.json` | 实验报告 |
 | `findings.md` / `findings.json` | 检测发现报告（6 条） |
 | `*.png` | 图表：\|t\| 随样本量、缓存行热图、实现对比 |
-| `hengshi-1.0.0-src.zip` | 源码 |
+| `hengshi-1.0.1-src.zip` | 源码 |
 | `SHA256SUMS.txt` | 全部资产的哈希 |
 
 ## 复现
